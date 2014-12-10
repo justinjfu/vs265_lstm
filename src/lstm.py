@@ -30,13 +30,6 @@ class LSTMWeights(Weights):
     def __str__(self):
         raise NotImplemented
 
-#Feedforward pass
-class LSTMLayerActivations(object):
-    def __init__(self, n):
-        pass
-
-    def forward(self, weights, prev_cell, input):
-        pass
 
 class LSTMLayerWeights(object):
     def __init__(self, n, n_input, act_f, act_g, act_h):
@@ -59,5 +52,23 @@ class LSTMLayerWeights(object):
         self.cellw_x = np.zeros(n, n_input)  # cell state weights from X
         self.cellw_h = np.zeros(n, n_input)  # cell state  weights from previous hidden
 
+    def forward(self, previous_cell, previous_hidden, X):
+        """
+        Compute forward activations
+        :param previous_cell:
+        :param previous_hidden:
+        :param X:
+        :return:
+        """
+        pass
 
+    def backward(self, next_cell, next_hidden, output):
+        """
+        Compute backward activations
+        :param previous_cell:
+        :param previous_hidden:
+        :param X:
+        :return:
+        """
+        pass
 
