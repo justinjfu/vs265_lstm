@@ -21,7 +21,6 @@ def gd(objective, initial, iters=100, heartbeat = 10, save_to_file = None):
         if i % heartbeat == 0:
             print 'Completed %d iterations. Objective: %f' % (i, objective.value_at(weights))
             if save_to_file:
-                objective.save_to_file(save_to_file, weights)
+                weights.save_to_file(save_to_file)
 
     return weights
-

@@ -8,6 +8,7 @@ from objective import Objective, Weights
 from descend import gd
 import numpy as np
 
+
 class SimpleObjective(Objective):
     def __init__(self):
         super(SimpleObjective, self).__init__()
@@ -21,11 +22,10 @@ class SimpleObjective(Objective):
     def value_at(self, wts):
         return wts.val**2+3
 
-    def save_to_file(self, filename, wts):
-        print 'Saving weight ', wts.val, ' to file: ', filename
 
 class SimpleWeight(Weights):
     def __init__(self, val):
+        super(SimpleWeight, self).__init__()
         self.val = val
 
     def add_weight(self, other_weight):
@@ -33,6 +33,9 @@ class SimpleWeight(Weights):
 
     def mul_scalar(self, other_scalar):
         return SimpleWeight(self.val*other_scalar)
+
+    def save_to_file(self, filename):
+        print 'Saving weight ', self.val, ' to file: ', filename
 
     def __str__(self):
         return str(self.val)

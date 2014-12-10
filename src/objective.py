@@ -19,18 +19,6 @@ class Objective(object):
         """
         raise NotImplemented
 
-    def save_to_file(self, filename, weights):
-        """
-        Save weights to a file
-        """
-        raise NotImplemented
-
-    def read_from_file(self, filename, weights):
-        """
-        Read weights from a file
-        """
-        raise NotImplemented
-
 class Weights(object):
     def __init__(self):
         pass
@@ -53,6 +41,19 @@ class Weights(object):
         """
         Multiply the values in this weight object by a
         single scalar
+        """
+        raise NotImplemented
+
+    def save_to_file(self, filename):
+        """
+        Save weights to a file
+        """
+        raise NotImplemented
+
+    @classmethod
+    def read_from_file(self, filename):
+        """
+        Read weights from a file
         """
         raise NotImplemented
 
