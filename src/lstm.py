@@ -5,6 +5,8 @@ from objective import Objective, Weights
 class LSTMObjective(Objective):
     def __init__(self, training_set):
         super(LSTMObjective, self).__init__()
+        self.weights = None
+        self.training = training_set
 
     def gradient_at(self, wts):
         raise NotImplemented
@@ -57,7 +59,7 @@ class LSTMLayerWeights(object):
 
         self.final_output_weights = np.random.uniform(-1, 1, (n,n)) # layer output weights
 
-    def forward(self, previous_cell, previous_hidden, Xt):
+    def forward(self, previous_cell, previous_hidden, previous_layer_input):
         """
         Compute forward activations
         :param previous_cell:
@@ -66,19 +68,19 @@ class LSTMLayerWeights(object):
         :return: [new cell states, new hidden states, output]. All are N-dimensional vectors
         """
         # Compute input gate
-        input_a = self.inw_x.dot(Xt) + self.inw_h.dot(previous_hidden) + self.inw_c.dot(previous_cell)
+        input_a = self.inw_x.dot(previous_layer_input) + self.inw_h.dot(previous_hidden) + self.inw_c.dot(previous_cell)
         input_b = self.act_f(input_a)  # Input gate outputs
 
         # Compute forget gate
-        forget_a = self.forgetw_x.dot(Xt) + self.forgetw_h.dot(previous_hidden) + self.forgetw_c.dot(previous_cell)
+        forget_a = self.forgetw_x.dot(previous_layer_input) + self.forgetw_h.dot(previous_hidden) + self.forgetw_c.dot(previous_cell)
         forget_b = self.act_f(forget_a)  # Forget gate outputs
 
         # Compute new cell states
-        a_t_c = self.cellw_x.dot(Xt) + self.cellw_h.dot(previous_hidden)
+        a_t_c = self.cellw_x.dot(previous_layer_input) + self.cellw_h.dot(previous_hidden)
         new_cell_states = input_b*self.act_g(a_t_c) + forget_b*previous_cell
 
         # Compute output gates
-        output_a = self.outw_x.dot(Xt) + self.outw_h.dot(previous_hidden) + self.outw_c.dot(new_cell_states)
+        output_a = self.outw_x.dot(previous_layer_input) + self.outw_h.dot(previous_hidden) + self.outw_c.dot(new_cell_states)
         output_b = self.act_f(output_a)  # Input gate outputs
 
         # Compute new hidden layer outputs
@@ -89,7 +91,7 @@ class LSTMLayerWeights(object):
 
         return new_cell_states, new_hidden, output
 
-    def backward(self, next_cell, next_hidden, output):
+    def backward(self, next_cell, next_hidden, next_layer_output):
         """
         Compute backward activations
         :param previous_cell:
@@ -100,4 +102,4 @@ class LSTMLayerWeights(object):
         pass
 
 if __name__ == '__main__':
-    
+    pass

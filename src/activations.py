@@ -14,6 +14,9 @@ class Activation(object):
     def deriv2nd(self, x):
         raise NotImplemented
 
+    def __call__(self, *args, **kwargs):
+        return self.val(*args)
+
 
 class Logistic(Activation):
     def __init__(self):
