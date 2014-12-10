@@ -10,7 +10,7 @@ class LSTMObjective(Objective):
         raise NotImplemented
 
     def value_at(self, wts):
-        raise NotImplemented
+        raise 
 
 
 class LSTMWeights(Weights):
@@ -40,22 +40,22 @@ class LSTMLayerWeights(object):
         self.act_g = act_g  # activation function on inputs
         self.act_h = act_h  # activation function on ouputs
 
-        self.forgetw_x = np.zeros(n, n_input)  # forget weights from X
-        self.forgetw_h = np.zeros(n, n)  # forget weights from previous hidden
-        self.forgetw_c = np.zeros(n, n)  # forget weights from previous cell state
+        self.forgetw_x = np.random.uniform(-1, 1, (n, n_input))  # forget weights from X
+        self.forgetw_h = np.random.uniform(-1, 1, (n, n))  # forget weights from previous hidden
+        self.forgetw_c = np.random.uniform(-1, 1, (n, n))  # forget weights from previous cell state
 
-        self.inw_x = np.zeros(n, n_input)  # input weights from X
-        self.inw_h = np.zeros(n, n)  # input weights from previous hidden
-        self.inw_c = np.zeros(n, n)  # input weights from previous cell state
+        self.inw_x = np.random.uniform(-1, 1, (n, n_input))  # input weights from X
+        self.inw_h = np.random.uniform(-1, 1, (n, n))  # input weights from previous hidden
+        self.inw_c = np.random.uniform(-1, 1, (n, n))  # input weights from previous cell state
 
-        self.outw_x = np.zeros(n, n_input)  # output weights from X
-        self.outw_h = np.zeros(n, n)  # output weights from previous hidden
-        self.outw_c = np.zeros(n, n)  # output weights from current cell state
+        self.outw_x = np.random.uniform(-1, 1, (n, n_input))  # output weights from X
+        self.outw_h = np.random.uniform(-1, 1, (n, n))  # output weights from previous hidden
+        self.outw_c = np.random.uniform(-1, 1, (n, n))  # output weights from current cell state
 
-        self.cellw_x = np.zeros(n, n_input)  # cell state weights from X
-        self.cellw_h = np.zeros(n, n)  # cell state weights from previous hidden
+        self.cellw_x = np.random.uniform(-1, 1, (n, n_input))  # cell state weights from X
+        self.cellw_h = np.random.uniform(-1, 1, (n, n))  # cell state weights from previous hidden
 
-        self.final_output_weights = np.zeros(n,n) # layer output weights
+        self.final_output_weights = np.random.uniform(-1, 1, (n,n)) # layer output weights
 
     def forward(self, previous_cell, previous_hidden, Xt):
         """
@@ -98,3 +98,6 @@ class LSTMLayerWeights(object):
         :return:
         """
         pass
+
+if __name__ == '__main__':
+    
