@@ -2,11 +2,9 @@
 Simple test on the gradient descent code.
 
 Tries to minimize f(x) = x^2+3
-
 """
 from objective import Objective, Weights
 from descend import gd
-import numpy as np
 
 
 class SimpleObjective(Objective):
