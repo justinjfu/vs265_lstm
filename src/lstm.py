@@ -55,13 +55,15 @@ class LSTMLayerWeights(object):
         self.cellw_x = np.zeros(n, n_input)  # cell state weights from X
         self.cellw_h = np.zeros(n, n_input)  # cell state weights from previous hidden
 
+        self.final_output_weights = np.zeros(n,n) # layer output weights
+
     def forward(self, previous_cell, previous_hidden, Xt):
         """
         Compute forward activations
         :param previous_cell:
         :param previous_hidden:
         :param X:
-        :return: [new cell states, new hidden states]. Both are N-dimensional vectors
+        :return: [new cell states, new hidden states, output]. All are N-dimensional vectors
         """
         # Compute input gate
         input_a = self.inw_x.dot(Xt) + self.inw_h.dot(previous_hidden) + self.inw_c.dot(previous_cell)
@@ -81,7 +83,11 @@ class LSTMLayerWeights(object):
 
         # Compute new hidden layer outputs
         new_hidden = output_b*self.act_h(new_cell_states)
-        return new_cell_states, new_hidden
+
+        # Compute layer outputs
+        output = self.final_output_weights.dot(new_hidden)
+
+        return new_cell_states, new_hidden, output
 
     def backward(self, next_cell, next_hidden, output):
         """
