@@ -1,5 +1,5 @@
-
-def gd(objective, initial, iters=100, heartbeat = 10, save_to_file = None):
+def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
+       learning_rate=1e-2, momentum_rate=0.3):
     """
     Perform a simple gradient descent.
 
@@ -11,12 +11,15 @@ def gd(objective, initial, iters=100, heartbeat = 10, save_to_file = None):
     :param save_to_file: Filename to save intermediate weights to. If left None, does
         not save
     """
-    rate = 0.01
-
     weights = initial
+    last_gradient = None
     for i in range(iters):
-        gradient = objective.gradient_at(weights)
-        weights = weights+(gradient*-rate)
+        gradient = objective.gradient_at(weights) * -learning_rate
+        weights += gradient
+
+        if last_gradient:
+            weights += last_gradient * momentum_rate
+        last_gradient = gradient
 
         if i % heartbeat == 0:
             print 'Completed %d iterations. Objective: %f' % (i, objective.value_at(weights))
