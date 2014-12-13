@@ -102,13 +102,13 @@ class LSTMLayerWeights(object):
 
     def forward_across_time(self, inputs):
         all_outputs = []
-        #import pdb; pdb.set_trace()
         for n in range(len(inputs)):  # Loop through training examples
             T, D, _ = inputs[n].shape
+            shapedInput = inputs[n]
             cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
-            outputs = np.zeros((T, self.n_output ,1))
+            outputs = np.zeros((T, self.n_output, 1))
             for t in range(T):
-                cs, hs, output_t = self.forward(cs, hs, inputs[n][t,:])
+                cs, hs, output_t = self.forward(cs, hs, shapedInput[t,:])
                 outputs[t] = output_t
             all_outputs.append(outputs)
         return all_outputs
@@ -214,22 +214,22 @@ class LSTMLayerWeights(object):
 
 if __name__ == '__main__':
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
-    f, g, h = Logistic(), Logistic(), Logistic()
-    lstm = LSTMLayerWeights(2, 2, 1, f, g, h)
-
     N = 1
-    trainingIn1 = np.array([[1, 0, 0, 0, 0, 0, 0, 1] * N, [0,0,0,0,0,0,0,0]*N])
-    trainingIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N])
+    trainingIn1 = np.array([[1, 0, 0, 0, 0, 0, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T
+    trainingIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N]).T
     trainingIn1 = trainingIn1.reshape(8,2,1)
     trainingIn2 = trainingIn2.reshape(4,2,1)
 
     trainingIn = [trainingIn1, trainingIn2]
     print trainingIn1
-    trainingOut1 = np.cumsum(trainingIn1[:,0,:]) % 2
-    trainingOut2 = np.cumsum(trainingIn2[:,0,:]) % 2
+    trainingOut1 = (np.cumsum(trainingIn1, axis=0) % 2)[:,0,:]
+    trainingOut2 = (np.cumsum(trainingIn2, axis=0) % 2)[:,0,:]
 
     print trainingOut1
     trainingOut = [trainingOut1, trainingOut2]
+
+    f, g, h = Logistic(), Logistic(), Logistic()
+    lstm = LSTMLayerWeights(2, trainingIn[0].shape[1], 1, f, g, h)
 
 
     weights = lstm.to_weights_array()
@@ -251,7 +251,6 @@ if __name__ == '__main__':
                           np.zeros(lstm.final_output_weights.shape)])
 
     def eval_objective(lstm_object, trainingIn, trainingOut):
-        import pdb; pdb.set_trace()
         outputs = lstm_object.forward_across_time(trainingIn)
 
         error = 0
@@ -263,8 +262,8 @@ if __name__ == '__main__':
     perturb_amount = 1e-5
     ObjF = LSTMObjective(trainingIn)
 
-    print eval_objective(lstm, trainingIn, trainingOut)
-    for trial in range(300):
+    #print eval_objective(lstm, trainingIn, trainingOut)
+    for trial in range(500):
         #import pdb; pdb.set_trace()
         for wi in range(len(weights)):  # need to iterate through each weight independently
             weight = weights[wi]
@@ -284,8 +283,10 @@ if __name__ == '__main__':
         #print 'weights:', weights
         lstm.update_layer_weights(d_weights)
         obj, output = eval_objective(lstm, trainingIn, trainingOut)
-        print obj
-        print output
+        if (trial+1) % 100 == 0:
+            print "Trial =", trial+1
+            print obj
+            print output
     print trainingOut
 
 
