@@ -1,13 +1,15 @@
 def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
        learning_rate=1e-2, momentum_rate=0.3):
     """
-    Perform a simple gradient descent.
+    Perform a simple gradient descent with momentum.
 
     :param objective: An Objective object
     :param initial: Initial weights
     :param iters: Number of iterations to descend
-    :param hearbeat: Rate at which to print a status message and save intermediate
+    :param heartbeat: Rate at which to print a status message and save intermediate
         weights (if save_to_file is specified)
+    :param learning_rate: Scaling factor on gradient
+    :param momentum_rate: Scaling factor on momentum
     :param save_to_file: Filename to save intermediate weights to. If left None, does
         not save
     """
