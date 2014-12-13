@@ -68,6 +68,7 @@ class LSTMLayerWeights(object):
     def __init__(self, n, n_input, n_output, act_f, act_g, act_h):
         self.n = n  # number of units on this layer
         self.n_input = n_input  # number of inputs into this layer
+        self.n_output = n_output
 
         self.act_f = act_f  # activation function on gates
         self.act_g = act_g  # activation function on inputs
@@ -98,6 +99,19 @@ class LSTMLayerWeights(object):
 
         self.final_output_weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                                       (n_output, n))  # layer output weights
+
+    def forward_across_time(self, inputs):
+        all_outputs = []
+        #import pdb; pdb.set_trace()
+        for n in range(len(inputs)):  # Loop through training examples
+            T, D, _ = inputs[n].shape
+            cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
+            outputs = np.zeros((T, self.n_output ,1))
+            for t in range(T):
+                cs, hs, output_t = self.forward(cs, hs, inputs[n][t,:])
+                outputs[t] = output_t
+            all_outputs.append(outputs)
+        return all_outputs
 
     def forward(self, previous_cell, previous_hidden, previous_layer_input):
         """
@@ -201,11 +215,22 @@ class LSTMLayerWeights(object):
 if __name__ == '__main__':
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
     f, g, h = Logistic(), Logistic(), Logistic()
-    lstm = LSTMLayerWeights(2, 1, 1, f, g, h)
+    lstm = LSTMLayerWeights(2, 2, 1, f, g, h)
 
     N = 1
-    trainingIn = np.array([1, 0, 0, 0, 0, 0, 0, 1] * N)
-    trainingOut = np.cumsum(trainingIn) % 2
+    trainingIn1 = np.array([[1, 0, 0, 0, 0, 0, 0, 1] * N, [0,0,0,0,0,0,0,0]*N])
+    trainingIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N])
+    trainingIn1 = trainingIn1.reshape(8,2,1)
+    trainingIn2 = trainingIn2.reshape(4,2,1)
+
+    trainingIn = [trainingIn1, trainingIn2]
+    print trainingIn1
+    trainingOut1 = np.cumsum(trainingIn1[:,0,:]) % 2
+    trainingOut2 = np.cumsum(trainingIn2[:,0,:]) % 2
+
+    print trainingOut1
+    trainingOut = [trainingOut1, trainingOut2]
+
 
     weights = lstm.to_weights_array()
 
@@ -226,16 +251,14 @@ if __name__ == '__main__':
                           np.zeros(lstm.final_output_weights.shape)])
 
     def eval_objective(lstm_object, trainingIn, trainingOut):
-        #import pdb; pdb.set_trace()
-        outputs = np.zeros(trainingOut.shape)
-        cs, hs = np.zeros((2, 1)), np.zeros((2, 1))
-        for t in range(len(trainingIn)):
-            # _, _, temp_out_old = lstm.forward(cs, hs, trainingIn[t]) # the output for this training sample
-            #lessObj = ObjF.value_at(temp_out_old, trainingOut[t]) # the error with negative perturb
-            cs, hs, output = lstm_object.forward(cs, hs, trainingIn[t])  # calc the real error
-            outputs[t] = output
-        diff = np.array(outputs) - trainingOut
-        return np.linalg.norm(diff), outputs
+        import pdb; pdb.set_trace()
+        outputs = lstm_object.forward_across_time(trainingIn)
+
+        error = 0
+        for i in range(len(trainingIn)):
+            diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
+            error += np.linalg.norm(diff)
+        return error, outputs
 
     perturb_amount = 1e-5
     ObjF = LSTMObjective(trainingIn)
@@ -259,7 +282,7 @@ if __name__ == '__main__':
                 dweight[index] = grad  # save gradient, will update all the weights at the end
         #print 'D_weights:', d_weights
         #print 'weights:', weights
-        lstm.update_layer_weights(0.5*d_weights)
+        lstm.update_layer_weights(d_weights)
         obj, output = eval_objective(lstm, trainingIn, trainingOut)
         print obj
         print output
