@@ -238,7 +238,7 @@ if __name__ == '__main__':
     trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
 
     f, g, h = Logistic(), Logistic(), Logistic()
-    lstm = LSTMLayerWeights(2, trainingIn[0].shape[1], 1, f, g, h)
+    lstm = LSTMLayerWeights(1, trainingIn[0].shape[1], 1, f, g, h)
 
 
     weights = lstm.to_weights_array()
