@@ -38,7 +38,7 @@ class LSTMWeights(Weights):
 
 
 class LSTMNetwork(object):
-    def __init__(self, layers, act_f, act_g, act_h):
+    def __init__(self, layers):
         """
         :param layers: A list of integers denoting # cells in each layer.
             Ex. [10, 30, 10]
@@ -46,18 +46,55 @@ class LSTMNetwork(object):
         :param act_g: Activation function on inputs
         :param act_h: Activation function on outputs
         """
-        pass
+        self.layers = layers
 
-    def forward_eval(self, inputs):
+    def forward_across_time(self, inputs):
         """
         Run forward pass on the input, computing network outputs at each timestep
         :param input: A N x IN_DIM x T input. IN_DIM is the input dimension of the network
         :return: An N x OUT_DIM x T output. OUT_DIM is the output dimension of the network
         """
-        pass
+        current_in = inputs
+        for layer in self.layers:
+            current_in = layer.forward_across_time(current_in)
+        return current_in
 
     def gradient(self):
         pass
+
+    def update_layer_weights(self, d_weights):
+        for i in range(len(self.layers)):
+            self.layers[i].update_layer_weights(d_weights[i])
+
+    def eval_objective(self, trainingIn, trainingOut):
+        outputs = self.forward_across_time(trainingIn)
+        error = 0
+        for i in range(len(trainingIn)):
+            diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
+            error += np.linalg.norm(diff)
+        return error, outputs
+
+    def numerical_gradient(self, d_weights, trainingIn, trainingOut, perturb_amount = 1e-5):
+        #import pdb; pdb.set_trace()
+        for i in range(len(self.layers)):
+            lstm = self.layers[i]
+            weights = lstm.to_weights_array()
+            dweights = d_weights[i]
+            for wi in range(len(weights)):  # need to iterate through each weight independently
+                weight = weights[wi]
+                dweight = dweights[wi]  # dweight is where we store the gradients for each particular weight
+                for index, val in np.ndenumerate(weight):  # a 'single' weight is a matrix, so we iterate within as well
+                    weight[index] -= perturb_amount  # w_ij - e
+                    lessObj, _ = self.eval_objective(trainingIn, trainingOut)
+
+                    weight[index] += 2 * perturb_amount  # w_ij + e
+                    moreObj, _ = self.eval_objective(trainingIn, trainingOut)
+                    diff = moreObj - lessObj  # difference
+                    # import pdb; pdb.set_trace()
+                    grad = -1 * diff / (2 * perturb_amount)  # negative gradient
+                    weight[index] -= perturb_amount  # set weight back to normal
+                    dweight[index] = grad  # save gradient, will update all the weights at the end
+
 
 ForwardIntermediate = namedtuple("ForwardIntermediate",
     "input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output")
@@ -82,19 +119,19 @@ class LSTMLayerWeights(object):
 
         self.forgetw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # forget weights from X
         self.forgetw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                           (n, num_cells))  # forget weights from previous hidden
+                                           (n, n))  # forget weights from previous hidden
         self.forgetw_c = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                            (n, num_cells))  # forget weights from previous cell state
 
         self.inw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # input weights from X
         self.inw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                       (n, num_cells))  # input weights from previous hidden
+                                       (n, n))  # input weights from previous hidden
         self.inw_c = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                        (n, num_cells))  # input weights from previous cell state
 
         self.outw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # output weights from X
         self.outw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                        (n, num_cells))  # output weights from previous hidden
+                                        (n, n))  # output weights from previous hidden
         self.outw_c = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                         (n, num_cells))  # output weights from current cell state
 
@@ -111,12 +148,12 @@ class LSTMLayerWeights(object):
         for n in range(len(inputs)):  # Loop through training examples
             T, D, _ = inputs[n].shape
             shapedInput = inputs[n]
-            cs, hs = np.zeros((self.n, self.num_cells)), np.zeros((self.n, self.num_cells))
+            cs, hs = np.zeros((self.n, self.num_cells)), np.zeros((self.n, 1))
             outputs = np.zeros((T, self.n, 1))
             for t in range(T):
                 intermed = self.forward(cs, hs, shapedInput[t,:])
                 cs = intermed.new_cell_states
-                hs = intermed.new_hidden
+                hs = intermed.output
                 output_t = intermed.output
                 outputs[t] = output_t
             all_outputs.append(outputs)
@@ -131,7 +168,6 @@ class LSTMLayerWeights(object):
         :return: [new cell states, new hidden states, output]. All are N-dimensional vectors
         """
         # Compute input gate
-        import pdb; pdb.set_trace()
         input_a = self.inw_x.dot(previous_layer_input) + self.inw_h.dot(previous_hidden) + np.sum(self.inw_c*(previous_cell), axis=1, keepdims=True)
         input_b = self.act_f(input_a)  # Input gate outputs
 
@@ -142,6 +178,7 @@ class LSTMLayerWeights(object):
 
         # Compute new cell states
         a_t_c = self.cellw_x.dot(previous_layer_input)[:,:,0] + self.cellw_h.dot(previous_hidden)[:,:,0]
+        a_t_c = a_t_c.T
         new_cell_states = input_b * self.act_g(a_t_c) + forget_b * previous_cell
 
         # Compute output gates
@@ -246,31 +283,32 @@ class LSTMLayerWeights(object):
         self.final_output_weights += dweights[11]
 
 
-    def to_weights_array(lstm):
-        return np.array([lstm.forgetw_x,
-                        lstm.forgetw_h,
-                        lstm.forgetw_c,
+    def to_weights_array(self):
+        return [self.forgetw_x,
+                self.forgetw_h,
+                self.forgetw_c,
 
-                        lstm.inw_x,
-                        lstm.inw_h,
-                        lstm.inw_c,
+                self.inw_x,
+                self.inw_h,
+                self.inw_c,
 
-                        lstm.outw_x,
-                        lstm.outw_h,
-                        lstm.outw_c,
+                self.outw_x,
+                self.outw_h,
+                self.outw_c,
 
-                        lstm.cellw_x,
-                        lstm.cellw_h,
-                        lstm.final_output_weights])
+                self.cellw_x,
+                self.cellw_h,
+                self.final_output_weights]
 
+    
 if __name__ == '__main__':
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
     N = 1
-    trainingIn1 = np.array([[1, 1, 1, 1, 1, 1, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8,2,1)
-    trainingIn2 = np.array([[1, 0, 1, 0] * N, [0,0,0,0]*N]).T.reshape(4,2,1)
-    trainingIn3 = np.array([[0, 0, 0, 1, 0, 1, 1, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8,2,1)
-    trainingIn4 = np.array([[1, 0, 1, 1, 1, 1] * N, [0,0,0,0,0,0]*N]).T.reshape(6,2,1)
-    trainingIn5 = np.array([[0, 1, 0, 0, 1, 0, 1] * N, [0,0,0,0,0,0,0]*N]).T.reshape(7,2,1)
+    trainingIn1 = np.array([[1, 1, 1, 1, 1, 1, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
+    trainingIn2 = np.array([[1, 0, 1, 0] * N, [0,0,0,0]*N]).T.reshape(4*N,2,1)
+    trainingIn3 = np.array([[0, 0, 0, 1, 0, 1, 1, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
+    trainingIn4 = np.array([[1, 0, 1, 1, 1, 1] * N, [0,0,0,0,0,0]*N]).T.reshape(6*N,2,1)
+    trainingIn5 = np.array([[0, 1, 0, 0, 1, 0, 1] * N, [0,0,0,0,0,0,0]*N]).T.reshape(7*N,2,1)
 
     trainingIn = [trainingIn1, trainingIn2, trainingIn3, trainingIn4, trainingIn5]
     trainingOut1 = (np.cumsum(trainingIn1, axis=0) % 2)[:,0,:]
@@ -282,66 +320,23 @@ if __name__ == '__main__':
     trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
 
     f, g, h = Logistic(), Logistic(), Logistic()
-    lstm = LSTMLayerWeights(2, 1, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, f, g, h)
+    lstm_layer2 = LSTMLayerWeights(1, 2, f, g, h)
+    d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
+    d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
+    d_weights = [d_weight1, d_weight2]
 
-    weights = lstm.to_weights_array()
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
 
-    d_weights = np.array([np.zeros(lstm.forgetw_x.shape),
-                          np.zeros(lstm.forgetw_h.shape),
-                          np.zeros(lstm.forgetw_c.shape),
-
-                          np.zeros(lstm.inw_x.shape),
-                          np.zeros(lstm.inw_h.shape),
-                          np.zeros(lstm.inw_c.shape),
-
-                          np.zeros(lstm.outw_x.shape),
-                          np.zeros(lstm.outw_h.shape),
-                          np.zeros(lstm.outw_c.shape),
-
-                          np.zeros(lstm.cellw_x.shape),
-                          np.zeros(lstm.cellw_h.shape),
-                          np.zeros(lstm.final_output_weights.shape)])
-
-    def eval_objective(lstm_object, trainingIn, trainingOut):
-        outputs = lstm_object.forward_across_time(trainingIn)
-
-        error = 0
-        for i in range(len(trainingIn)):
-            diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
-            error += np.linalg.norm(diff)
-        return error, outputs
-
-    perturb_amount = 1e-5
-    ObjF = LSTMObjective(trainingIn)
-
-    #print eval_objective(lstm, trainingIn, trainingOut)
     for trial in range(500):
-        #import pdb; pdb.set_trace()
-        for wi in range(len(weights)):  # need to iterate through each weight independently
-            weight = weights[wi]
-            dweight = d_weights[wi]  # dweight is where we store the gradients for each particular weight
-            for index, val in np.ndenumerate(weight):  # a 'single' weight is a matrix, so we iterate within as well
-                weight[index] -= perturb_amount  # w_ij - e
-                lessObj, _ = eval_objective(lstm, trainingIn, trainingOut)
-
-                weight[index] += 2 * perturb_amount  # w_ij + e
-                moreObj, _ = eval_objective(lstm, trainingIn, trainingOut)
-                diff = moreObj - lessObj  # difference
-                # import pdb; pdb.set_trace()
-                grad = -1 * diff / (2 * perturb_amount)  # negative gradient
-                weight[index] -= perturb_amount  # set weight back to normal
-                dweight[index] = grad  # save gradient, will update all the weights at the end
-        #print 'D_weights:', d_weights
-        #print 'weights:', weights
+        lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
         lstm.update_layer_weights(d_weights)
-        obj, output = eval_objective(lstm, trainingIn, trainingOut)
+        err, output = lstm.eval_objective(trainingIn, trainingOut)
         if (trial+1) % 100 == 0:
             print "Trial =", trial+1
-            print obj
+            print err
             print output
-    print trainingOut
-
 
     print "TESTING INPUT NAO"
     testIn1 = np.array([[1, 0, 1] * N, [0,0,0]*N]).T.reshape(3,2,1)
@@ -353,7 +348,7 @@ if __name__ == '__main__':
     testOut3 = (np.cumsum(testIn3, axis=0) % 2)[:,0,:]
 
     testOut = [testOut1, testOut2, testOut3]
-    obj, output = eval_objective(lstm, testIn, testOut)
+    obj, output = lstm.eval_objective(testIn, testOut)
     print testOut
     print output
     print obj
