@@ -1,6 +1,7 @@
 import numpy as np
 from objective import Objective, Weights
 from activations import Logistic
+from collections import namedtuple
 
 WEIGHT_INIT_RANGE = 0.1
 
@@ -58,6 +59,8 @@ class LSTMNetwork(object):
     def gradient(self):
         pass
 
+ForwardIntermediate = namedtuple("ForwardIntermediate",
+    "input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output")
 
 class LSTMLayerWeights(object):
     """
@@ -108,7 +111,10 @@ class LSTMLayerWeights(object):
             cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
             outputs = np.zeros((T, self.n_output, 1))
             for t in range(T):
-                cs, hs, output_t = self.forward(cs, hs, shapedInput[t,:])
+                intermed = self.forward(cs, hs, shapedInput[t,:])
+                cs = intermed.new_cell_states
+                hs = intermed.new_hidden
+                output_t = intermed.output
                 outputs[t] = output_t
             all_outputs.append(outputs)
         return all_outputs
@@ -145,7 +151,8 @@ class LSTMLayerWeights(object):
         # Compute layer outputs
         output = self.final_output_weights.dot(new_hidden)
 
-        return new_cell_states, new_hidden, output
+        return ForwardIntermediate(input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
+                                   output_b, new_hidden, output)
 
     def backward(self):
         """
