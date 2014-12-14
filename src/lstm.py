@@ -215,18 +215,20 @@ class LSTMLayerWeights(object):
 if __name__ == '__main__':
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
     N = 1
-    trainingIn1 = np.array([[1, 0, 0, 0, 0, 0, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T
-    trainingIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N]).T
-    trainingIn1 = trainingIn1.reshape(8,2,1)
-    trainingIn2 = trainingIn2.reshape(4,2,1)
+    trainingIn1 = np.array([[1, 1, 1, 1, 1, 1, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8,2,1)
+    trainingIn2 = np.array([[1, 0, 1, 0] * N, [0,0,0,0]*N]).T.reshape(4,2,1)
+    trainingIn3 = np.array([[0, 0, 0, 1, 0, 1, 1, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8,2,1)
+    trainingIn4 = np.array([[1, 0, 1, 1, 1, 1] * N, [0,0,0,0,0,0]*N]).T.reshape(6,2,1)
+    trainingIn5 = np.array([[0, 1, 0, 0, 1, 0, 1] * N, [0,0,0,0,0,0,0]*N]).T.reshape(7,2,1)
 
-    trainingIn = [trainingIn1, trainingIn2]
-    print trainingIn1
+    trainingIn = [trainingIn1, trainingIn2, trainingIn3, trainingIn4, trainingIn5]
     trainingOut1 = (np.cumsum(trainingIn1, axis=0) % 2)[:,0,:]
     trainingOut2 = (np.cumsum(trainingIn2, axis=0) % 2)[:,0,:]
+    trainingOut3 = (np.cumsum(trainingIn3, axis=0) % 2)[:,0,:]
+    trainingOut4 = (np.cumsum(trainingIn4, axis=0) % 2)[:,0,:]
+    trainingOut5 = (np.cumsum(trainingIn5, axis=0) % 2)[:,0,:]
 
-    print trainingOut1
-    trainingOut = [trainingOut1, trainingOut2]
+    trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
 
     f, g, h = Logistic(), Logistic(), Logistic()
     lstm = LSTMLayerWeights(2, trainingIn[0].shape[1], 1, f, g, h)
@@ -288,5 +290,21 @@ if __name__ == '__main__':
             print obj
             print output
     print trainingOut
+
+
+    print "TESTING INPUT NAO"
+    testIn1 = np.array([[1, 0, 1] * N, [0,0,0]*N]).T.reshape(3,2,1)
+    testIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N]).T.reshape(4,2,1)
+    testIn3 = np.array([[1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1] * N, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]*N]).T.reshape(23,2,1)
+    testIn = [testIn1, testIn2, testIn3]
+    testOut1 = (np.cumsum(testIn1, axis=0) % 2)[:,0,:]
+    testOut2 = (np.cumsum(testIn2, axis=0) % 2)[:,0,:]
+    testOut3 = (np.cumsum(testIn3, axis=0) % 2)[:,0,:]
+
+    testOut = [testOut1, testOut2, testOut3]
+    obj, output = eval_objective(lstm, testIn, testOut)
+    print testOut
+    print output
+    print obj
 
 
