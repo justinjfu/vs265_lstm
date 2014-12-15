@@ -66,19 +66,22 @@ class LSTMNetwork(object):
     def gradient(self, inputs, outputs):
         Nlayers = len(self.layers)
         layer_intermediates = [None]*Nlayers
+        gradients = []
+        for layer in self.layers:
+            weights_in_layer = [np.zeros(weight.shape) for weight in layer.to_weights_array()]
+            gradients.append(weights_in_layer)
         for i in range(len(inputs)):  # loop over training examples
-
             current_in = inputs[i]
             for i in range(len(self.layers)):
                 intermediates = self.layers[i].forward_across_time(current_in)
                 layer_intermediates[i] = intermediates
             final_layer_output = np.array([intermed.output for intermed in layer_intermediates[Nlayers-1]])
 
-            next_layer_del_k = self.output_backprop_error(final_layer_output, outputs)
-            gradients = [None]*Nlayers
+            next_layer_del_k = self.output_backprop_error(final_layer_output, outputs[i])
             for i in range(len(self.layers))[::-1]:
                 gradient, next_layer_del_k = self.layers[i].gradient(layer_intermediates[i], next_layer_del_k)
-                gradients[i] = gradient
+                for j in range(len(gradients[i])):
+                    gradients[i][j] += gradient[j]
         return gradients
 
     def update_layer_weights(self, d_weights):
@@ -94,12 +97,8 @@ class LSTMNetwork(object):
             error += np.dot(diff,diff)
         return error, outputs
 
-    def output_backprop_error(self, outputs, trainingOut):
-        errors = []
-        for i in range(len(trainingOut)):
-            diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
-            errors.append(diff)
-        return errors
+    def output_backprop_error(self, output, trainingOut):
+        return np.array(output) - trainingOut.reshape(output.shape)
 
     def numerical_gradient(self, d_weights, trainingIn, trainingOut, perturb_amount = 1e-5):
         #import pdb; pdb.set_trace()
@@ -124,10 +123,10 @@ class LSTMNetwork(object):
 
 
 ForwardIntermediate = namedtuple("ForwardIntermediate",
-    "input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output_pre output")
+    "previous_layer_input input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output_pre output")
 
 BackIntermediate = namedtuple("BackIntermediate",
-    "hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_k del_h")
+    "del_k_pre hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_k del_h")
 
 class LSTMLayerWeights(object):
     """
@@ -168,6 +167,7 @@ class LSTMLayerWeights(object):
 
     
     def init_dels(self):
+        del_k_pre = np.zeros((self.n_output,1))
         hidden_deriv = np.zeros((self.n,1))
 
         # Output gate
@@ -186,7 +186,8 @@ class LSTMLayerWeights(object):
         del_k = np.zeros((self.n,1))
 
         del_h = np.zeros((self.n,1))
-        return BackIntermediate(hidden_deriv,
+        return BackIntermediate(del_k_pre,
+                                hidden_deriv,
                                 output_gate_delta,
                                 cell_deriv,
                                 cell_delta,
@@ -239,7 +240,7 @@ class LSTMLayerWeights(object):
         output_pre = self.final_output_weights.dot(new_hidden)
         output = self.act_h(output_pre)
 
-        return ForwardIntermediate(input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
+        return ForwardIntermediate(previous_layer_input, input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
                                    output_b, new_hidden, output_pre, output)
 
     def backward(self, next_backward_intermediate, current_forward_intermediate, next_forward_intermediate, prev_cell_state,
@@ -256,8 +257,8 @@ class LSTMLayerWeights(object):
         next_backward = next_backward_intermediate
 
         # Hidden State
-        next_layer_del_k = next_layer_del_k*self.act_h.deriv(forward.output_pre)
-        hidden_deriv = self.final_output_weights.dot(next_layer_del_k) + next_backward.del_h
+        del_k_pre = next_layer_del_k*self.act_h.deriv(forward.output_pre)
+        hidden_deriv = self.final_output_weights.dot(del_k_pre) + next_backward.del_h
 
         # Output gate
         output_gate_delta = self.act_f.deriv(forward.output_a) \
@@ -284,7 +285,7 @@ class LSTMLayerWeights(object):
                 self.outw_x(next_backward.output_gate_delta) + \
                 next_backward.cell_delta * np.sum(self.cellw_h, axis=0, keepdims=True)
 
-        return BackIntermediate(hidden_deriv, output_gate_delta, cell_deriv, cell_delta, forget_delta, input_delta,
+        return BackIntermediate(del_k_pre, hidden_deriv, output_gate_delta, cell_deriv, cell_delta, forget_delta, input_delta,
                                 del_k, del_h)
 
     def gradient(self, forward_intermediates, next_layer_del_k):
@@ -301,6 +302,7 @@ class LSTMLayerWeights(object):
         for t in range(T)[::-1]:
             intermed = self.backward(future_backward_intermediate,
                                      forward_intermediates[t],
+                                     forward_intermediates[t+1],
                                      previous_cell_state,
                                      next_layer_del_k)
             future_backward_intermediate = intermed
@@ -313,6 +315,44 @@ class LSTMLayerWeights(object):
         # Calculate gradient
         # TODO.
         gradient = None
+        forgetw_x_g = np.zeros((self.n, self.n))
+        inw_x_g = np.zeros((self.n, self.n))
+        outw_x_g = np.zeros((self.n, self.n))
+        cellw_x_g = np.zeros((self.n, self.n))
+
+        forgetw_h_g = np.zeros((self.n, self.n))
+        inw_h_g = np.zeros((self.n, self.n))
+        outw_h_g = np.zeros((self.n, self.n))
+        cellw_h_g = np.zeros((self.n, self.n))
+
+        final_output_g = np.zeros((self.n_output, self.n))
+        for t in range(T)[::-1]:
+            b_i = backward_intermediates[t]
+            f_i = forward_intermediates[t]
+            forgetw_x_g += np.outer(b_i.forget_delta, f_i.previous_layer_input)
+            inw_x_g += np.outer(b_i.input_delta, f_i.previous_layer_input)
+            outw_x_g += np.outer(b_i.output_gate_delta, f_i.previous_layer_input)
+            cellw_x_g += np.outer(b_i.cell_delta, f_i.previous_layer_input)
+
+            f_i_past = forward_intermediates[t-1]
+            forgetw_h_g += np.outer(b_i.forget_delta, f_i_past.new_hidden)
+            inw_h_g += np.outer(b_i.input_delta, f_i_past.new_hidden)
+            outw_h_g += np.outer(b_i.output_gate_delta, f_i_past.new_hidden)
+            cellw_h_g += np.outer(b_i.cell_delta, f_i_past.new_hidden)
+
+            final_output_g += np.outer(b_i.hidden_deriv, f_i.output)
+        
+        gradient = [forgetw_x_g,
+                    inw_x_g,
+                    outw_x_g,
+                    cellw_x_g,
+                                  
+                    forgetw_h_g,
+                    inw_h_g,
+                    outw_h_g,
+                    cellw_h_g,
+                                  
+                    final_output_g]
 
         layer_del_k = [x.del_k for x in backward_intermediates]
 
@@ -377,7 +417,8 @@ if __name__ == '__main__':
     lstm = LSTMNetwork([lstm_layer1])
 
     for trial in range(500):
-        lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
+        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
+        lstm.gradient(trainingIn, trainingOut)
         lstm.update_layer_weights(d_weights)
         if (trial+1) % 100 == 0:
             err, output = lstm.eval_objective(trainingIn, trainingOut)
