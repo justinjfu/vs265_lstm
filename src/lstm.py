@@ -72,16 +72,16 @@ class LSTMNetwork(object):
             gradients.append(weights_in_layer)
         for i in range(len(inputs)):  # loop over training examples
             current_in = inputs[i]
-            for i in range(len(self.layers)):
-                intermediates = self.layers[i].forward_across_time(current_in)
-                layer_intermediates[i] = intermediates
+            for j in range(len(self.layers)):
+                intermediates = self.layers[j].forward_across_time(current_in)
+                layer_intermediates[j] = intermediates
             final_layer_output = np.array([intermed.output for intermed in layer_intermediates[Nlayers-1]])
 
             next_layer_del_k = self.output_backprop_error(final_layer_output, outputs[i])
-            for i in range(len(self.layers))[::-1]:
-                gradient, next_layer_del_k = self.layers[i].gradient(layer_intermediates[i], next_layer_del_k)
-                for j in range(len(gradients[i])):
-                    gradients[i][j] += gradient[j]
+            for j in range(len(self.layers))[::-1]:
+                gradient, next_layer_del_k = self.layers[j].gradient(layer_intermediates[j], next_layer_del_k)
+                for k in range(len(gradients[j])):
+                    gradients[j][k] += gradient[k]
         return gradients
 
     def update_layer_weights(self, d_weights):
@@ -259,16 +259,6 @@ class LSTMLayerWeights(object):
         wt = self.final_output_weights[0]
         hs = forward.new_hidden
 
-
-        #array([[  1.49243784e-05,  -0.00000000e+00],
-        #[ -5.89433946e-03,  -0.00000000e+00],
-        #[  2.41989426e-03,  -0.00000000e+00]]
-
-        #array([[-0.00918666,  0.        ],
-        #[-0.00918471,  0.        ],
-        #[-0.00918285,  0.        ]]
-
-
         # Hidden State
         del_k_pre = next_layer_del_k*self.act_h.deriv(forward.output_pre)
         hidden_deriv = self.final_output_weights.T.dot(del_k_pre) + next_backward.del_h
@@ -359,12 +349,13 @@ class LSTMLayerWeights(object):
                 f_i_past_hidden = np.zeros((self.n, 1))
             else:
                 f_i_past_hidden = forward_intermediates[t-1].new_hidden
+
             forgetw_h_g += np.outer(b_i.forget_delta, f_i_past_hidden)
             inw_h_g += np.outer(b_i.input_delta, f_i_past_hidden)
             outw_h_g += np.outer(b_i.output_gate_delta, f_i_past_hidden)
-            cellw_h_g += np.outer(b_i.cell_delta, f_i_past_hidden) # OK!
+            cellw_h_g += np.outer(b_i.cell_delta, f_i_past_hidden)
 
-            final_output_g += np.outer(f_i.new_hidden, b_i.del_k_pre).T  # OK!
+            final_output_g += np.outer(f_i.new_hidden, b_i.del_k_pre).T
         
         gradient = [-forgetw_x_g,
                     -forgetw_h_g,
@@ -385,7 +376,6 @@ class LSTMLayerWeights(object):
         return gradient, layer_del_k
 
     def update_layer_weights(self, dweights):
-        """
         self.forgetw_x += dweights[0]
         self.forgetw_h += dweights[1]
 
@@ -397,7 +387,7 @@ class LSTMLayerWeights(object):
 
         self.cellw_x += dweights[6]
         self.cellw_h += dweights[7]
-        """
+
         self.final_output_weights += dweights[8]
 
 
@@ -417,29 +407,29 @@ class LSTMLayerWeights(object):
 
     
 if __name__ == '__main__':
-    np.random.seed(20)
+    #np.random.seed(20)
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
     N = 1
-    trainingIn1 = np.array([[1] * N, [0]*N]).T.reshape(1*N,2,1)
-    #trainingIn1 = np.array([[1, 1, 1, 1, 1, 1, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
-    #trainingIn2 = np.array([[1, 0, 1, 0] * N, [0,0,0,0]*N]).T.reshape(4*N,2,1)
-    #trainingIn3 = np.array([[0, 0, 0, 1, 0, 1, 1, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
-    #trainingIn4 = np.array([[1, 0, 1, 1, 1, 1] * N, [0,0,0,0,0,0]*N]).T.reshape(6*N,2,1)
-    #trainingIn5 = np.array([[0, 1, 0, 0, 1, 0, 1] * N, [0,0,0,0,0,0,0]*N]).T.reshape(7*N,2,1)
+    #trainingIn1 = np.array([[1, 0] * N, [0, 0]*N]).T.reshape(2*N,2,1)
+    trainingIn1 = np.array([[1, 1, 1, 1, 1, 1, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
+    trainingIn2 = np.array([[1, 0, 1, 0] * N, [0,0,0,0]*N]).T.reshape(4*N,2,1)
+    trainingIn3 = np.array([[0, 0, 0, 1, 0, 1, 1, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
+    trainingIn4 = np.array([[1, 0, 1, 1, 1, 1] * N, [0,0,0,0,0,0]*N]).T.reshape(6*N,2,1)
+    trainingIn5 = np.array([[0, 1, 0, 0, 1, 0, 1] * N, [0,0,0,0,0,0,0]*N]).T.reshape(7*N,2,1)
 
-    #trainingIn = [trainingIn1, trainingIn2, trainingIn3, trainingIn4, trainingIn5]
-    trainingIn = [trainingIn1]
+    trainingIn = [trainingIn1, trainingIn2, trainingIn3, trainingIn4, trainingIn5]
+    #trainingIn = [trainingIn1, trainingIn2, trainingIn3]
     trainingOut1 = (np.cumsum(trainingIn1, axis=0) % 2)[:,0,:]
-    #trainingOut2 = (np.cumsum(trainingIn2, axis=0) % 2)[:,0,:]
-    #trainingOut3 = (np.cumsum(trainingIn3, axis=0) % 2)[:,0,:]
-    #trainingOut4 = (np.cumsum(trainingIn4, axis=0) % 2)[:,0,:]
-    #trainingOut5 = (np.cumsum(trainingIn5, axis=0) % 2)[:,0,:]
+    trainingOut2 = (np.cumsum(trainingIn2, axis=0) % 2)[:,0,:]
+    trainingOut3 = (np.cumsum(trainingIn3, axis=0) % 2)[:,0,:]
+    trainingOut4 = (np.cumsum(trainingIn4, axis=0) % 2)[:,0,:]
+    trainingOut5 = (np.cumsum(trainingIn5, axis=0) % 2)[:,0,:]
 
-    #trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
-    trainingOut = [trainingOut1]
+    trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
+    #trainingOut = [trainingOut1, trainingOut2, trainingOut3]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(3, 2, 1, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, 1, f, g, h)
     #lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
     #d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
@@ -448,12 +438,12 @@ if __name__ == '__main__':
 
     lstm = LSTMNetwork([lstm_layer1])
 
-    for trial in range(40):
-        import pdb; pdb.set_trace()
-        lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
-        gradient = lstm.gradient(trainingIn, trainingOut)
+    for trial in range(300):
+        #import pdb; pdb.set_trace()
+        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
+        d_weights = lstm.gradient(trainingIn, trainingOut)
         lstm.update_layer_weights(d_weights)
-        if (trial+1) % 10 == 0:
+        if (trial+1) % 50 == 0:
             err, output = lstm.eval_objective(trainingIn, trainingOut)
             print "Trial =", trial+1
             print err
@@ -462,15 +452,15 @@ if __name__ == '__main__':
     print "TESTING INPUT NAO"
     testIn1 = np.array([[1, 0, 1] * N, [0,0,0]*N]).T.reshape(3,2,1)
     testIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N]).T.reshape(4,2,1)
-    #testIn3 = np.array([[1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1] * N, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]*N]).T.reshape(23,2,1)
-    #testIn = [testIn1, testIn2, testIn3]
-    testIn = [testIn1, testIn2]
+    testIn3 = np.array([[1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1] * N, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]*N]).T.reshape(23,2,1)
+    testIn = [testIn1, testIn2, testIn3]
+    #testIn = [testIn1, testIn2]
     testOut1 = (np.cumsum(testIn1, axis=0) % 2)[:,0,:]
     testOut2 = (np.cumsum(testIn2, axis=0) % 2)[:,0,:]
-    #testOut3 = (np.cumsum(testIn3, axis=0) % 2)[:,0,:]
+    testOut3 = (np.cumsum(testIn3, axis=0) % 2)[:,0,:]
 
-    #testOut = [testOut1, testOut2, testOut3]
-    testOut = [testOut1, testOut2]
+    testOut = [testOut1, testOut2, testOut3]
+    #testOut = [testOut1, testOut2]
     obj, output = lstm.eval_objective(testIn, testOut)
     print testOut
     print output
