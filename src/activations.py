@@ -27,12 +27,12 @@ class Logistic(Activation):
 
     def deriv(self, x):
         y = self.val(x)
-        raise y*(1-y)
+        return y*(1-y)
 
     def deriv2nd(self, x):
         y = self.val(x)
         dy = y*(1-y)
-        raise dy*(1-(2*y))
+        return dy*(1-(2*y))
 
 
 class Tanh(Activation):
@@ -44,9 +44,9 @@ class Tanh(Activation):
 
     def deriv(self, x):
         y = self.val(x)
-        raise 1.0-(y*y)
+        return 1.0-(y*y)
 
     def deriv2nd(self, x):
         y = self.val(x)
         dy = 1.0-(y*y)
-        raise -2*dy*y
+        return -2*dy*y
