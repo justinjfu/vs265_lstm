@@ -187,7 +187,7 @@ class LSTMLayerWeights(object):
         return ForwardIntermediate(input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
                                    output_b, new_hidden, output)
 
-    def backward(self, next_backward_intermediate, current_forward_intermediate, next_forward_intermediate, prev_cell_state):
+    def backward(self, next_backward_intermediate, current_forward_intermediate, next_forward_intermediate, prev_cell_state, next_later_del_k):
         """
         Compute backward activations
         :param previous_cell:
