@@ -1,6 +1,6 @@
 import numpy as np
 from objective import Objective, Weights
-from activations import Logistic
+from activations import Logistic, Tanh
 from collections import namedtuple
 
 WEIGHT_INIT_RANGE = 0.1
@@ -182,6 +182,7 @@ class LSTMLayerWeights(object):
 
         # Compute layer outputs
         output = self.final_output_weights.dot(new_hidden)
+        output = self.act_h(output)
 
         return ForwardIntermediate(input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
                                    output_b, new_hidden, output)
@@ -304,7 +305,7 @@ if __name__ == '__main__':
 
     trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
 
-    f, g, h = Logistic(), Logistic(), Logistic()
+    f, g, h = Logistic(), Logistic(), Tanh()
     lstm_layer1 = LSTMLayerWeights(2, 2, 1, f, g, h)
     #lstm_layer2 = LSTMLayerWeights(1, 2, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
