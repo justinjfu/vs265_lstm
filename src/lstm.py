@@ -423,7 +423,7 @@ if __name__ == '__main__':
     #trainingOut = [trainingOut0]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(3, 2, 1, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(1, 2, 1, f, g, h)
     #lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
     #d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
@@ -432,9 +432,9 @@ if __name__ == '__main__':
 
     lstm = LSTMNetwork([lstm_layer1])
 
-    for trial in range(500):
+    for trial in range(1000):
         #import pdb; pdb.set_trace()
-        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-6)
+        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
         d_weights = lstm.gradient(trainingIn, trainingOut)
         lstm.update_layer_weights(d_weights)
         if (trial+1) % 100 == 0:
@@ -443,7 +443,16 @@ if __name__ == '__main__':
             print err
             print output
 
+    print "FINAL WEIGHTS"
+    final_weights = lstm.layers[0].to_weights_array()
+    for final_wt in final_weights:
+        print final_wt
+        print ""
+    import pickle
+    with open('lstm.dat', 'wb') as datfile:
+        pickle.dump(lstm, datfile)
     print "TESTING INPUT NAO"
+    N=1
     testIn1 = np.array([[1, 0, 1] * N, [0,0,0]*N]).T.reshape(3,2,1)
     testIn2 = np.array([[1, 0, 0, 1] * N, [0,0,0,0]*N]).T.reshape(4,2,1)
     testIn3 = np.array([[1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 0, 1] * N, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]*N]).T.reshape(23,2,1)
