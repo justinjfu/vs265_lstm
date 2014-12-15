@@ -71,8 +71,15 @@ class LSTMNetwork(object):
         error = 0
         for i in range(len(trainingIn)):
             diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
-            error += np.linalg.norm(diff)
+            error += np.dot(diff,diff)
         return error, outputs
+
+    def output_backprop_error(self, outputs, trainingOut):
+        errors = []
+        for i in range(len(trainingOut)):
+            diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
+            errors.append(diff)
+        return errors
 
     def numerical_gradient(self, d_weights, trainingIn, trainingOut, perturb_amount = 1e-5):
         #import pdb; pdb.set_trace()
