@@ -101,7 +101,6 @@ class LSTMNetwork(object):
         return -(trainingOut.reshape(output.shape) - np.array(output))
 
     def numerical_gradient(self, d_weights, trainingIn, trainingOut, perturb_amount = 1e-5):
-        #import pdb; pdb.set_trace()
         #original_objective, _ = self.eval_objective(trainingIn, trainingOut)
         for i in range(len(self.layers)):
             lstm = self.layers[i]
@@ -258,7 +257,6 @@ class LSTMLayerWeights(object):
         # Hidden State
         del_k_pre = next_layer_del_k*self.act_h.deriv(forward.output_pre)
 
-        #import pdb; pdb.set_trace()
         del_h = self.inw_h.T.dot(next_backward.input_delta) + \
                 self.forgetw_h.T.dot(next_backward.forget_delta) +\
                 self.outw_h.T.dot(next_backward.output_gate_delta) +\
@@ -270,7 +268,6 @@ class LSTMLayerWeights(object):
         output_gate_delta = self.act_f.deriv(forward.output_a) \
                             * self.act_h(forward.new_cell_states) * hidden_deriv
 
-        #import pdb; pdb.set_trace()
         # Cell States
         cell_deriv = forward.output_b * self.act_h.deriv(forward.new_cell_states) * hidden_deriv + \
                      next_forward.forget_b * next_backward.cell_deriv
@@ -298,7 +295,6 @@ class LSTMLayerWeights(object):
         :param next_layer_del_k:
         :return:
         """
-        #import pdb; pdb.set_trace()
         T = len(forward_intermediates)
         backward_intermediates = [None]*T
         future_backward_intermediate = self.init_back_intermed
@@ -405,7 +401,6 @@ class LSTMLayerWeights(object):
 
     
 if __name__ == '__main__':
-    np.random.seed(20)
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
     N = 1
     trainingIn0 = np.array([[1, 0, 1] * N, [0, 0, 0]*N]).T.reshape(3*N,2,1)
