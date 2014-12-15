@@ -100,7 +100,7 @@ ForwardIntermediate = namedtuple("ForwardIntermediate",
     "input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output_pre output")
 
 BackIntermediate = namedtuple("BackIntermediate",
-    "hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_g_a_t_c del_k del_h")
+    "hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_k del_h")
 
 class LSTMLayerWeights(object):
     """
@@ -219,20 +219,18 @@ class LSTMLayerWeights(object):
         # Input gate
         input_delta = self.act_f.deriv(forward.input_a) * np.sum(np.outer(self.act_g(forward.a_t_c), cell_deriv))
 
-        del_g_a_t_c = forward.input_b*cell_deriv
-
         del_k = self.inw_x(input_delta) + \
                 self.forgetw_x(forget_delta) + \
                 self.outw_x(output_gate_delta) + \
-                del_g_a_t_c * self.act_g.deriv(forward.a_t_c) * np.sum(self.cellw_x, axis=0, keepdims=True)
+                cell_delta * np.sum(self.cellw_x, axis=0, keepdims=True)
 
         del_h = self.inw_x(next_backward.input_delta) + \
                 self.forgetw_x(next_backward.forget_delta) +\
                 self.outw_x(next_backward.output_gate_delta) + \
-                next_backward.del_g_a_t_c * self.act_g.deriv(next_forward.a_t_c) * np.sum(self.cellw_h, axis=0, keepdims=True)
+                next_backward.cell_delta * np.sum(self.cellw_h, axis=0, keepdims=True)
 
         return BackIntermediate(hidden_deriv, output_gate_delta, cell_deriv, cell_delta, forget_delta, input_delta,
-                                del_g_a_t_c, del_k, del_h)
+                                del_k, del_h)
 
     def gradient(self, inputs):
         all_outputs = []
