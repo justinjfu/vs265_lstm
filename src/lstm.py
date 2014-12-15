@@ -227,7 +227,7 @@ class LSTMLayerWeights(object):
         del_h = self.inw_x(next_backward.input_delta) + \
                 self.forgetw_x(next_backward.forget_delta) +\
                 self.outw_x(next_backward.output_gate_delta) + \
-                next_backward.del_g_a_t_c * self.act_g.deriv(next_forward.a_t_c) * np.sum(self.cellh_x, axis=0, keepdims=True)
+                next_backward.del_g_a_t_c * self.act_g.deriv(next_forward.a_t_c) * np.sum(self.cellw_h, axis=0, keepdims=True)
 
         return BackIntermediate(hidden_deriv, output_gate_delta, cell_deriv, cell_delta, forget_delta, input_delta,
                                 del_g_a_t_c, del_k, del_h)
