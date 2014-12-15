@@ -137,6 +137,35 @@ class LSTMLayerWeights(object):
         self.final_output_weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                                       (n_output, n))  # layer output weights
 
+    
+    def init_dells(self):
+        hidden_deriv = np.zeros((n,1))
+
+        # Output gate
+        output_gate_delta = np.zeros((n,1))
+
+        # Cell States
+        cell_deriv = np.zeros((n,1))
+        cell_delta = np.zeros((n,1))
+
+        # Forget gate
+        forget_delta = np.zeros((n,1))
+
+        # Input gate
+        input_delta = np.zeros((n,1))
+
+        del_k = np.zeros((n,1))
+
+        del_h = np.zeros((n,1))
+        return BackIntermediate(hidden_deriv,
+                                output_gate_delta,
+                                cell_deriv,
+                                cell_delta,
+                                forget_delta,
+                                input_delta,
+                                del_k,
+                                del_h)
+
     def forward_across_time(self, inputs):
         all_outputs = []
         for n in range(len(inputs)):  # Loop through training examples
