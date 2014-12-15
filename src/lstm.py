@@ -93,8 +93,8 @@ class LSTMNetwork(object):
         error = 0
         for i in range(len(trainingIn)):
             diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
-            diff = diff.reshape(len(diff))
-            error += 0.5*np.dot(diff,diff)
+            diff = np.linalg.norm(diff)
+            error += 0.5*diff*diff
         return error, outputs
 
     def output_backprop_error(self, output, trainingOut):
@@ -448,7 +448,6 @@ if __name__ == '__main__':
     for final_wt in final_weights:
         print final_wt
         print ""
-    import pickle
     with open('lstm.dat', 'wb') as datfile:
         pickle.dump(lstm, datfile)
     print "TESTING INPUT NAO"
