@@ -97,7 +97,7 @@ class LSTMNetwork(object):
 
 
 ForwardIntermediate = namedtuple("ForwardIntermediate",
-    "input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output")
+    "input_a input_b forget_a forget_b a_t_c new_cell_states output_a output_b new_hidden output_pre output")
 
 BackIntermediate = namedtuple("BackIntermediate",
     "hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_g_a_t_c del_k del_h")
@@ -181,13 +181,14 @@ class LSTMLayerWeights(object):
         new_hidden = output_b * self.act_h(new_cell_states)
 
         # Compute layer outputs
-        output = self.final_output_weights.dot(new_hidden)
-        output = self.act_h(output)
+        output_pre = self.final_output_weights.dot(new_hidden)
+        output = self.act_h(output_pre)
 
         return ForwardIntermediate(input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
-                                   output_b, new_hidden, output)
+                                   output_b, new_hidden, output_pre, output)
 
-    def backward(self, next_backward_intermediate, current_forward_intermediate, next_forward_intermediate, prev_cell_state):
+    def backward(self, next_backward_intermediate, current_forward_intermediate, next_forward_intermediate, prev_cell_state,
+                 next_layer_del_k):
         """
         Compute backward activations
         :param previous_cell:
@@ -200,7 +201,8 @@ class LSTMLayerWeights(object):
         next_backward = next_backward_intermediate
 
         # Hidden State
-        hidden_deriv = self.final_output_weights.dot(next_backward_intermediate.del_k) + next_backward.del_h
+        next_layer_del_k = next_layer_del_k*self.act_h.deriv(forward.output_pre)
+        hidden_deriv = self.final_output_weights.dot(next_layer_del_k) + next_backward.del_h
 
         # Output gate
         output_gate_delta = self.act_f.deriv(forward.output_a) \
@@ -255,7 +257,8 @@ class LSTMLayerWeights(object):
             for t in range(T)[::-1]:
                 intermed = self.backward(future_backward_intermediate,
                                          forward_intermediates[t],
-                                         previous_cell_state)
+                                         previous_cell_state,
+                                         next_layer_del_k)
                 future_backward_intermediate = intermed
                 if t > 0:
                     previous_cell_state = forward_intermediates[t-1].new_cell_states
