@@ -137,26 +137,28 @@ class LSTMLayerWeights(object):
         self.final_output_weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                                       (n_output, n))  # layer output weights
 
+        self.init_back_intermed = self.init_dels()
+
     
-    def init_dells(self):
-        hidden_deriv = np.zeros((n,1))
+    def init_dels(self):
+        hidden_deriv = np.zeros((self.n,1))
 
         # Output gate
-        output_gate_delta = np.zeros((n,1))
+        output_gate_delta = np.zeros((self.n,1))
 
         # Cell States
-        cell_deriv = np.zeros((n,1))
-        cell_delta = np.zeros((n,1))
+        cell_deriv = np.zeros((self.n,1))
+        cell_delta = np.zeros((self.n,1))
 
         # Forget gate
-        forget_delta = np.zeros((n,1))
+        forget_delta = np.zeros((self.n,1))
 
         # Input gate
-        input_delta = np.zeros((n,1))
+        input_delta = np.zeros((self.n,1))
 
-        del_k = np.zeros((n,1))
+        del_k = np.zeros((self.n,1))
 
-        del_h = np.zeros((n,1))
+        del_h = np.zeros((self.n,1))
         return BackIntermediate(hidden_deriv,
                                 output_gate_delta,
                                 cell_deriv,
@@ -279,7 +281,7 @@ class LSTMLayerWeights(object):
             #all_outputs.append(outputs)
 
             backward_intermediates = [None]*T
-            future_backward_intermediate = None
+            future_backward_intermediate = self.init_back_intermed
             previous_cell_state = forward_intermediates[T-2].new_cell_states
             for t in range(T)[::-1]:
                 intermed = self.backward(future_backward_intermediate,
