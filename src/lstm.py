@@ -306,14 +306,14 @@ if __name__ == '__main__':
     trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(2, 2, 1, f, g, h)
-    #lstm_layer2 = LSTMLayerWeights(1, 2, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, 2, f, g, h)
+    lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
-    #d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
+    d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
-    d_weights = [d_weight1]
+    d_weights = [d_weight1, d_weight2]
 
-    lstm = LSTMNetwork([lstm_layer1])
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
 
     for trial in range(500):
         lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
