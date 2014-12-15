@@ -108,52 +108,46 @@ class LSTMLayerWeights(object):
     context.
     """
 
-    def __init__(self, n, n_input, act_f, act_g, act_h, num_cells=2):
+    def __init__(self, n, n_input, n_output, act_f, act_g, act_h):
         self.n = n  # number of units on this layer
         self.n_input = n_input  # number of inputs into this layer
+        self.n_output = n_output
 
         self.act_f = act_f  # activation function on gates
         self.act_g = act_g  # activation function on inputs
         self.act_h = act_h  # activation function on ouputs
-        self.num_cells = num_cells
 
         self.forgetw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # forget weights from X
         self.forgetw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                            (n, n))  # forget weights from previous hidden
-        self.forgetw_c = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                           (n, num_cells))  # forget weights from previous cell state
 
         self.inw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # input weights from X
         self.inw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                        (n, n))  # input weights from previous hidden
-        self.inw_c = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                       (n, num_cells))  # input weights from previous cell state
 
         self.outw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # output weights from X
         self.outw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                         (n, n))  # output weights from previous hidden
-        self.outw_c = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                        (n, num_cells))  # output weights from current cell state
 
         self.cellw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                         (num_cells, n, n_input))  # cell state weights from X
+                                         (n, n_input))  # cell state weights from X
         self.cellw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                         (num_cells, n, n))  # cell state weights from previous hidden
+                                         (n, n))  # cell state weights from previous hidden
 
         self.final_output_weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
-                                                      (n, num_cells))  # layer output weights
+                                                      (n_output, n))  # layer output weights
 
     def forward_across_time(self, inputs):
         all_outputs = []
         for n in range(len(inputs)):  # Loop through training examples
             T, D, _ = inputs[n].shape
             shapedInput = inputs[n]
-            cs, hs = np.zeros((self.n, self.num_cells)), np.zeros((self.n, 1))
-            outputs = np.zeros((T, self.n, 1))
+            cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
+            outputs = np.zeros((T, self.n_output, 1))
             for t in range(T):
                 intermed = self.forward(cs, hs, shapedInput[t,:])
                 cs = intermed.new_cell_states
-                hs = intermed.output
+                hs = intermed.new_hidden
                 output_t = intermed.output
                 outputs[t] = output_t
             all_outputs.append(outputs)
@@ -168,29 +162,26 @@ class LSTMLayerWeights(object):
         :return: [new cell states, new hidden states, output]. All are N-dimensional vectors
         """
         # Compute input gate
-        input_a = self.inw_x.dot(previous_layer_input) + self.inw_h.dot(previous_hidden) + np.sum(self.inw_c*(previous_cell), axis=1, keepdims=True)
+        input_a = self.inw_x.dot(previous_layer_input) + self.inw_h.dot(previous_hidden)
         input_b = self.act_f(input_a)  # Input gate outputs
 
         # Compute forget gate
-        forget_a = self.forgetw_x.dot(previous_layer_input) + self.forgetw_h.dot(previous_hidden) + np.sum(self.forgetw_c*(
-            previous_cell), axis=1, keepdims=True)
+        forget_a = self.forgetw_x.dot(previous_layer_input) + self.forgetw_h.dot(previous_hidden)
         forget_b = self.act_f(forget_a)  # Forget gate outputs
 
         # Compute new cell states
-        a_t_c = self.cellw_x.dot(previous_layer_input)[:,:,0] + self.cellw_h.dot(previous_hidden)[:,:,0]
-        a_t_c = a_t_c.T
+        a_t_c = self.cellw_x.dot(previous_layer_input) + self.cellw_h.dot(previous_hidden)
         new_cell_states = input_b * self.act_g(a_t_c) + forget_b * previous_cell
 
         # Compute output gates
-        output_a = self.outw_x.dot(previous_layer_input) + self.outw_h.dot(previous_hidden) + np.sum(self.outw_c*(
-            new_cell_states), axis=1, keepdims=True)
+        output_a = self.outw_x.dot(previous_layer_input) + self.outw_h.dot(previous_hidden)
         output_b = self.act_f(output_a)  # Input gate outputs
 
         # Compute new hidden layer outputs
         new_hidden = output_b * self.act_h(new_cell_states)
 
         # Compute layer outputs
-        output = np.sum(self.final_output_weights*(new_hidden), axis=1, keepdims=True)
+        output = self.final_output_weights.dot(new_hidden)
 
         return ForwardIntermediate(input_a, input_b, forget_a, forget_b, a_t_c, new_cell_states, output_a,
                                    output_b, new_hidden, output)
@@ -268,33 +259,27 @@ class LSTMLayerWeights(object):
     def update_layer_weights(self, dweights):
         self.forgetw_x += dweights[0]
         self.forgetw_h += dweights[1]
-        self.forgetw_c += dweights[2]
 
-        self.inw_x += dweights[3]
-        self.inw_h += dweights[4]
-        self.inw_c += dweights[5]
+        self.inw_x += dweights[2]
+        self.inw_h += dweights[3]
 
-        self.outw_x += dweights[6]
-        self.outw_h += dweights[7]
-        self.outw_c += dweights[8]
+        self.outw_x += dweights[4]
+        self.outw_h += dweights[5]
 
-        self.cellw_x += dweights[9]
-        self.cellw_h += dweights[10]
-        self.final_output_weights += dweights[11]
+        self.cellw_x += dweights[6]
+        self.cellw_h += dweights[7]
+        self.final_output_weights += dweights[8]
 
 
     def to_weights_array(self):
         return [self.forgetw_x,
                 self.forgetw_h,
-                self.forgetw_c,
 
                 self.inw_x,
                 self.inw_h,
-                self.inw_c,
 
                 self.outw_x,
                 self.outw_h,
-                self.outw_c,
 
                 self.cellw_x,
                 self.cellw_h,
@@ -320,20 +305,20 @@ if __name__ == '__main__':
     trainingOut = [trainingOut1, trainingOut2, trainingOut3, trainingOut4, trainingOut5]
 
     f, g, h = Logistic(), Logistic(), Logistic()
-    lstm_layer1 = LSTMLayerWeights(2, 2, f, g, h)
-    lstm_layer2 = LSTMLayerWeights(1, 2, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, 1, f, g, h)
+    #lstm_layer2 = LSTMLayerWeights(1, 2, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
-    d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
+    #d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
-    d_weights = [d_weight1, d_weight2]
+    d_weights = [d_weight1]
 
-    lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
+    lstm = LSTMNetwork([lstm_layer1])
 
     for trial in range(500):
         lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
         lstm.update_layer_weights(d_weights)
-        err, output = lstm.eval_objective(trainingIn, trainingOut)
         if (trial+1) % 100 == 0:
+            err, output = lstm.eval_objective(trainingIn, trainingOut)
             print "Trial =", trial+1
             print err
             print output
