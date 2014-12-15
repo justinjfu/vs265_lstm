@@ -54,13 +54,32 @@ class LSTMNetwork(object):
         :param input: A N x IN_DIM x T input. IN_DIM is the input dimension of the network
         :return: An N x OUT_DIM x T output. OUT_DIM is the output dimension of the network
         """
-        current_in = inputs
-        for layer in self.layers:
-            current_in = layer.forward_across_time(current_in)
-        return current_in
+        all_outputs = []
+        for i in range(len(inputs)):
+            current_in = inputs[i]
+            for layer in self.layers:
+                intermediates = layer.forward_across_time(current_in)
+                current_in = np.array([intermed.output for intermed in intermediates])
+            all_outputs.append(current_in)
+        return all_outputs
 
-    def gradient(self):
-        pass
+    def gradient(self, inputs, outputs):
+        Nlayers = len(self.layers)
+        layer_intermediates = [None]*Nlayers
+        for i in range(len(inputs)):  # loop over training examples
+
+            current_in = inputs[i]
+            for i in range(len(self.layers)):
+                intermediates = self.layers[i].forward_across_time(current_in)
+                layer_intermediates[i] = intermediates
+            final_layer_output = np.array([intermed.output for intermed in layer_intermediates[Nlayers-1]])
+
+            next_layer_del_k = self.output_backprop_error(final_layer_output, outputs)
+            gradients = [None]*Nlayers
+            for i in range(len(self.layers))[::-1]:
+                gradient, next_layer_del_k = self.layers[i].gradient(layer_intermediates[i], next_layer_del_k)
+                gradients[i] = gradient
+        return gradients
 
     def update_layer_weights(self, d_weights):
         for i in range(len(self.layers)):
@@ -176,21 +195,18 @@ class LSTMLayerWeights(object):
                                 del_k,
                                 del_h)
 
-    def forward_across_time(self, inputs):
-        all_outputs = []
-        for n in range(len(inputs)):  # Loop through training examples
-            T, D, _ = inputs[n].shape
-            shapedInput = inputs[n]
-            cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
-            outputs = np.zeros((T, self.n_output, 1))
-            for t in range(T):
-                intermed = self.forward(cs, hs, shapedInput[t,:])
-                cs = intermed.new_cell_states
-                hs = intermed.new_hidden
-                output_t = intermed.output
-                outputs[t] = output_t
-            all_outputs.append(outputs)
-        return all_outputs
+    def forward_across_time(self, input):
+        T, D, _ = input.shape
+        shapedInput = input
+        cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
+        outputs = np.zeros((T, self.n_output, 1))
+        intermediates = []
+        for t in range(T):
+            intermed = self.forward(cs, hs, shapedInput[t,:])
+            cs = intermed.new_cell_states
+            hs = intermed.new_hidden
+            intermediates.append(intermed)
+        return intermediates
 
     def forward(self, previous_cell, previous_hidden, previous_layer_input):
         """
