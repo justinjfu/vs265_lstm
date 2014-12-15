@@ -271,41 +271,36 @@ class LSTMLayerWeights(object):
         return BackIntermediate(hidden_deriv, output_gate_delta, cell_deriv, cell_delta, forget_delta, input_delta,
                                 del_k, del_h)
 
-    def gradient(self, inputs):
-        all_outputs = []
-        for n in range(len(inputs)):  # Loop through training examples
+    def gradient(self, forward_intermediates, next_layer_del_k):
+        """
+        Gradient for 1 input
+        :param forward_list:
+        :param next_layer_del_k:
+        :return:
+        """
+        T = len(forward_intermediates)
+        backward_intermediates = [None]*T
+        future_backward_intermediate = self.init_back_intermed
+        previous_cell_state = forward_intermediates[T-2].new_cell_states
+        for t in range(T)[::-1]:
+            intermed = self.backward(future_backward_intermediate,
+                                     forward_intermediates[t],
+                                     previous_cell_state,
+                                     next_layer_del_k)
+            future_backward_intermediate = intermed
+            if t > 0:
+                previous_cell_state = forward_intermediates[t-1].new_cell_states
+            else:
+                previous_cell_state = np.zeros((self.n, 1))
+            backward_intermediates[t] = intermed
 
-            T, D, _ = inputs[n].shape
-            shapedInput = inputs[n]
+        # Calculate gradient
+        # TODO.
+        gradient = None
 
+        layer_del_k = [x.del_k for x in backward_intermediates]
 
-            cs, hs = np.zeros((self.n, 1)), np.zeros((self.n, 1))
-            forward_intermediates = [None]*T
-            for t in range(T):
-                intermed = self.forward(cs, hs, shapedInput[t,:])
-                cs = intermed.new_cell_states
-                hs = intermed.new_hidden
-                forward_intermediates[t] = intermed
-            #all_outputs.append(outputs)
-
-            backward_intermediates = [None]*T
-            future_backward_intermediate = self.init_back_intermed
-            previous_cell_state = forward_intermediates[T-2].new_cell_states
-            for t in range(T)[::-1]:
-                intermed = self.backward(future_backward_intermediate,
-                                         forward_intermediates[t],
-                                         previous_cell_state,
-                                         next_layer_del_k)
-                future_backward_intermediate = intermed
-                if t > 0:
-                    previous_cell_state = forward_intermediates[t-1].new_cell_states
-                else:
-                    previous_cell_state = np.zeros((self.n, 1))
-                backward_intermediates[t] = intermed
-
-            # Calculate gradient
-            # TODO.
-        return all_outputs
+        return gradient, layer_del_k
 
     def update_layer_weights(self, dweights):
         self.forgetw_x += dweights[0]
