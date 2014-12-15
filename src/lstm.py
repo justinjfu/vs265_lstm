@@ -2,36 +2,49 @@ import numpy as np
 from objective import Objective, Weights
 from activations import Logistic, Tanh
 from collections import namedtuple
+from descend import gd
 
 WEIGHT_INIT_RANGE = 0.1
 
 
 class LSTMObjective(Objective):
-    def __init__(self, training_set):
+    def __init__(self, trainingIn, trainingOut, network):
         super(LSTMObjective, self).__init__()
-        self.weights = None
-        self.training = training_set
+        self.training_in = trainingIn
+        self.training_out = trainingOut
+        self.network = network
 
     def gradient_at(self, wts):
-        raise NotImplemented
+        self.network.from_weights_array(wts.wts)
+        return LSTMWeights(self.network.gradient(self.training_in, self.training_out))
 
-    def value_at(self, wts, label):
-        return 0.5 * (wts - label) ** 2
+    def value_at(self, wts):
+        self.network.from_weights_array(wts.wts)
+        err, _ = self.network.eval_objective(self.training_in, self.training_out)
+        return err
 
 
 class LSTMWeights(Weights):
-    def __init__(self):
+    def __init__(self, wts):
         super(LSTMWeights, self).__init__()
-        self.layers = []
+        self.wts = wts
 
     def add_weight(self, other_weight):
-        raise NotImplemented
-
+        return LSTMWeights([ [self.wts[L][mat] + other_weight.wts[L][mat] for mat in range(len(self.wts[L]))] for L in range(len(self.wts))])
+        
     def mul_scalar(self, other_scalar):
-        raise NotImplemented
+        return LSTMWeights([ [mat * other_scalar for mat in layer] for layer in self.wts])
 
     def save_to_file(self, filename):
-        raise NotImplemented
+        with open(filename, 'wb') as netfile:
+            pickle.dump(self.network, netfile)
+
+    @classmethod
+    def read_from_file(self, filename):
+        net = LSTMWeights(None)
+        with open(filename, 'rb') as netfile:
+            net.network = pickle.load(netfile)
+        return net
 
     def __str__(self):
         raise NotImplemented
@@ -47,6 +60,14 @@ class LSTMNetwork(object):
         :param act_h: Activation function on outputs
         """
         self.layers = layers
+    
+    def mul_scalar(self, scalar):
+        for layer in self.layers:
+            layer.mul_scalar(scalar)
+
+    def add_weight(self, other_network):
+        for i in range(len(self.layers)):
+            self.layers[i].update_layer_weights( other_network.layers[i].to_weights_array())
 
     def forward_across_time(self, inputs):
         """
@@ -84,9 +105,9 @@ class LSTMNetwork(object):
                     gradients[j][k] += gradient[k]
         return gradients
 
-    def update_layer_weights(self, d_weights):
+    def update_layer_weights(self, d_weights, K=1):
         for i in range(len(self.layers)):
-            self.layers[i].update_layer_weights(d_weights[i])
+            self.layers[i].update_layer_weights(d_weights[i], K=K)
 
     def eval_objective(self, trainingIn, trainingOut):
         outputs = self.forward_across_time(trainingIn)
@@ -99,6 +120,13 @@ class LSTMNetwork(object):
 
     def output_backprop_error(self, output, trainingOut):
         return -(trainingOut.reshape(output.shape) - np.array(output))
+
+    def to_weights_array(self):
+        return [x.to_weights_array() for x in self.layers]
+
+    def from_weights_array(self, dwts):
+        for i in range(len(self.layers)):
+            self.layers[i].from_weights_array(dwts[i])
 
     def numerical_gradient(self, d_weights, trainingIn, trainingOut, perturb_amount = 1e-5):
         #original_objective, _ = self.eval_objective(trainingIn, trainingOut)
@@ -118,7 +146,7 @@ class LSTMNetwork(object):
                     moreObj, _ = self.eval_objective(trainingIn, trainingOut)
                     diff = moreObj - lessObj  # difference
                     # import pdb; pdb.set_trace()
-                    grad = -1 * diff / (2* perturb_amount)  # negative gradient
+                    grad = 1 * diff / (2* perturb_amount)  # negative gradient
                     weight[index] -= perturb_amount  # set weight back to normal
                     dweight[index] = grad  # save gradient, will update all the weights at the end
 
@@ -351,39 +379,51 @@ class LSTMLayerWeights(object):
 
             final_output_g += np.outer(f_i.new_hidden, b_i.del_k_pre).T
         
-        gradient = [-forgetw_x_g,
-                    -forgetw_h_g,
+        gradient = [forgetw_x_g,
+                    forgetw_h_g,
 
-                    -inw_x_g,
-                    -inw_h_g,
+                    inw_x_g,
+                    inw_h_g,
 
-                    -outw_x_g,
-                    -outw_h_g,
+                    outw_x_g,
+                    outw_h_g,
 
-                    -cellw_x_g,
-                    -cellw_h_g,
+                    cellw_x_g,
+                    cellw_h_g,
                                   
-                    -final_output_g]
+                    final_output_g]
 
         layer_del_k = [x.del_k for x in backward_intermediates]
 
         return gradient, layer_del_k
 
-    def update_layer_weights(self, dweights):
-        self.forgetw_x += dweights[0]
-        self.forgetw_h += dweights[1]
+    def update_layer_weights(self, dweights, K=1):
+        self.forgetw_x += dweights[0]*K
+        self.forgetw_h += dweights[1]*K
 
-        self.inw_x += dweights[2]
-        self.inw_h += dweights[3]
+        self.inw_x += dweights[2]*K
+        self.inw_h += dweights[3]*K
 
-        self.outw_x += dweights[4]
-        self.outw_h += dweights[5]
+        self.outw_x += dweights[4]*K
+        self.outw_h += dweights[5]*K
 
-        self.cellw_x += dweights[6]
-        self.cellw_h += dweights[7]
+        self.cellw_x += dweights[6]*K
+        self.cellw_h += dweights[7]*K
 
-        self.final_output_weights += dweights[8]
+        self.final_output_weights += dweights[8]*K
+    def from_weights_array(self, wts):
+        self.forgetw_x = wts[0]
+        self.forgetw_h = wts[1]
 
+        self.inw_x = wts[2]
+        self.inw_h = wts[3]
+
+        self.outw_x = wts[4]
+        self.outw_h = wts[5]
+
+        self.cellw_x = wts[6]
+        self.cellw_h = wts[7]
+        self.final_output_weights = wts[8]
 
     def to_weights_array(self):
         return [self.forgetw_x,
@@ -401,6 +441,7 @@ class LSTMLayerWeights(object):
 
     
 if __name__ == '__main__':
+    np.random.seed(20)
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
     N = 1
     trainingIn0 = np.array([[1, 0, 1] * N, [0, 0, 0]*N]).T.reshape(3*N,2,1)
@@ -412,6 +453,7 @@ if __name__ == '__main__':
 
     trainingIn = [trainingIn1, trainingIn2, trainingIn3, trainingIn4, trainingIn5]
     #trainingIn = [trainingIn0]
+
     trainingOut0 = (np.cumsum(trainingIn0, axis=0) % 2)[:,0,:]
     trainingOut1 = (np.cumsum(trainingIn1, axis=0) % 2)[:,0,:]
     trainingOut2 = (np.cumsum(trainingIn2, axis=0) % 2)[:,0,:]
@@ -423,33 +465,38 @@ if __name__ == '__main__':
     #trainingOut = [trainingOut0]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(1, 2, 1, f, g, h)
-    #lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, 1, f, g, h)
+    lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
-    #d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
+    d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
+    #d_weights = [d_weight1, d_weight2]
     d_weights = [d_weight1]
 
+    #lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
     lstm = LSTMNetwork([lstm_layer1])
 
+    """
     for trial in range(1000):
         #import pdb; pdb.set_trace()
         #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
         d_weights = lstm.gradient(trainingIn, trainingOut)
-        lstm.update_layer_weights(d_weights)
+        lstm.update_layer_weights(d_weights, K=-1)
         if (trial+1) % 100 == 0:
             err, output = lstm.eval_objective(trainingIn, trainingOut)
             print "Trial =", trial+1
             print err
             print output
+    """
+    wt = LSTMWeights(lstm.to_weights_array())
+    obj = LSTMObjective(trainingIn, trainingOut, lstm)
+    wt = gd(obj, wt, iters=1000, heartbeat=100, learning_rate = 0.5, momentum_rate = 0.5)
 
     print "FINAL WEIGHTS"
     final_weights = lstm.layers[0].to_weights_array()
     for final_wt in final_weights:
         print final_wt
         print ""
-    with open('lstm.dat', 'wb') as datfile:
-        pickle.dump(lstm, datfile)
     print "TESTING INPUT NAO"
     N=1
     testIn1 = np.array([[1, 0, 1] * N, [0,0,0]*N]).T.reshape(3,2,1)
