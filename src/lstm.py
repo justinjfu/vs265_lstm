@@ -96,6 +96,7 @@ class LSTMNetwork(object):
             for j in range(len(self.layers)):
                 intermediates = self.layers[j].forward_across_time(current_in)
                 layer_intermediates[j] = intermediates
+                current_in = np.array([intermed.output for intermed in intermediates])
             final_layer_output = np.array([intermed.output for intermed in layer_intermediates[Nlayers-1]])
 
             next_layer_del_k = self.output_backprop_error(final_layer_output, outputs[i])
@@ -443,8 +444,8 @@ class LSTMLayerWeights(object):
 if __name__ == '__main__':
     np.random.seed(20)
     # test on bitstring parity checker - tests feed forward only with numerical gradient calculation
-    N = 1
-    trainingIn0 = np.array([[1, 0, 1] * N, [0, 0, 0]*N]).T.reshape(3*N,2,1)
+    N = 3
+    trainingIn0 = np.array([[1 ,0,1] * N, [0,0,0]*N]).T.reshape(3*N,2,1)
     trainingIn1 = np.array([[1, 1, 1, 1, 1, 1, 0, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
     trainingIn2 = np.array([[1, 0, 1, 0] * N, [0,0,0,0]*N]).T.reshape(4*N,2,1)
     trainingIn3 = np.array([[0, 0, 0, 1, 0, 1, 1, 1] * N, [0,0,0,0,0,0,0,0]*N]).T.reshape(8*N,2,1)
@@ -465,21 +466,21 @@ if __name__ == '__main__':
     #trainingOut = [trainingOut0]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(2, 2, 1, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, 2, f, g, h)
     lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
     d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
-    #d_weights = [d_weight1, d_weight2]
-    d_weights = [d_weight1]
+    d_weights = [d_weight1, d_weight2]
+    #d_weights = [d_weight1]
 
-    #lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
-    lstm = LSTMNetwork([lstm_layer1])
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
+    #lstm = LSTMNetwork([lstm_layer1])
 
     """
     for trial in range(1000):
         #import pdb; pdb.set_trace()
-        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
+        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 5e-6)
         d_weights = lstm.gradient(trainingIn, trainingOut)
         lstm.update_layer_weights(d_weights, K=-1)
         if (trial+1) % 100 == 0:
