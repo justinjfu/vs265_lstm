@@ -14,7 +14,6 @@
 % smaller than 5cm (the original size); we will check this
 % in the camera-ready version and ask you to change it back.
 
-
 \title{Gesture Recognition with Recurrent Neural Networks}
 
 \author{Justin Fu \\
@@ -47,6 +46,12 @@ Intro goes here.
 \section{Data}
 
 We collected accelerometer data streamed from a smartphone.
+Specifically, we only considered values in the X and Y directions
+as seen from the perspective of the phone. 
+
+<insert picture of phone with axes labeled>
+
+We implemented X different gestures, with Y examples of each.
 
 \section{Model}
 \label{sect:pdf}
@@ -58,7 +63,7 @@ peephole connections that connect the internal cell state to these gates
 (as done in Vinyals et al. [2]).
 
 \begin{figure}[ht]
-\caption{A single LSTM cell.}
+\caption{A single LSTM cell. Red arrows are connections forward in time.}
   \centering
     \includegraphics[width=0.5\textwidth]{lstm_cell}
 \end{figure}
@@ -69,7 +74,7 @@ normal network layers to create a multilayer network.
 \subsection{Equations}
 
 We used squared error as our objective function. \(O\) is the network
-output and \(Y\) is the teacher value. \(n\) sums over each
+output and \(Y\) is the training label. \(n\) sums over each
 training example, \(t\) sums over time, and \(i\) sums over the dimensions
 of each training example at a given timestep.
 Note that \(t\) varies with each training example.
@@ -77,58 +82,95 @@ Note that \(t\) varies with each training example.
 \[  L(Y, O) = \sum_{n}^{N}  \sum_{t}^{len(O^{n})} \sum_{i}^{I} \frac{1}{2} (o_{i}^{n,t} - y_{i}^{n,t})^{2} \]
 
 Most of the equations on the forward and backward passes are the
-same as those in Graves [1], but some were missing so we specify all
-for completeness.
+same as those in Graves [1], but some were missing from his paper
+and we dropped the peepholes so we specify all for completeness.
 
 \subsection{Forward Dynamics}
 The forward dynamics of the network are specified as follows. Equations
 are specified for a whole layer (rather than per unit).
  Bolded values represent vectors. Note that \(*\)
-represents a point-wise multiply.
+represents a point-wise multiply, and the nonlinearities are applied
+element-wise to the input vector.
 
 Gates
-\[ \textbf{a}_{i} = W_{i,x}\textbf{x}^{t} +  W_{i,o}\textbf{o}^{t-1} \] 
-\[ \textbf{g}_{i} = \sigma( \textbf{a}_{i}) \]
-\[ \textbf{a}_{f} = W_{f,x}\textbf{x}^{t} +  W_{f,o}\textbf{o}^{t-1} \] 
-\[ \textbf{g}_{f} = \sigma( \textbf{a}_{f}) \]
-\[ \textbf{a}_{o} = W_{o,x}\textbf{x}^{t} +  W_{o,o}\textbf{o}^{t-1} \] 
-\[ \textbf{g}_{o} = \sigma( \textbf{a}_{o}) \]
+\[ \textbf{a}_{i}^{t} = W_{i,x}\textbf{x}^{t} +  W_{i,o}\textbf{o}^{t-1} \] 
+\[ \textbf{g}_{i}^{t} = \sigma( \textbf{a}_{i}^{t}) \]
+\[ \textbf{a}_{f}^{t} = W_{f,x}\textbf{x}^{t} +  W_{f,o}\textbf{o}^{t-1} \] 
+\[ \textbf{g}_{f}^{t} = \sigma( \textbf{a}_{f}^{t}) \]
+\[ \textbf{a}_{o}^{t} = W_{o,x}\textbf{x}^{t} +  W_{o,o}\textbf{o}^{t-1} \] 
+\[ \textbf{g}_{o}^{t} = \sigma( \textbf{a}_{o}^{t}) \]
 
 Cell State
-\[ \textbf{a}_{c} = W_{c,x}\textbf{x}^{t} +  W_{c,o}\textbf{o}^{t-1} \] 
-\[ \textbf{s}_{c} =  \textbf{g}_{i} * \sigma( \textbf{a}_{c}) + \textbf{g}_{f}*\textbf{s}_{c}^{t-1} \]
+\[ \textbf{a}_{c}^{t} = W_{c,x}\textbf{x}^{t} +  W_{c,o}\textbf{o}^{t-1} \] 
+\[ \textbf{s}_{c}^{t} =  \textbf{g}_{i}^{t} * \sigma( \textbf{a}_{c}^{t}) + \textbf{g}_{f}^{t}*\textbf{s}_{c}^{t-1} \]
 
 Cell Output (Hidden State)
-\[ \textbf{o} =  \textbf{g}_{i} * \tanh( \textbf{s}_{c}) \]
+\[ \textbf{o}^{t} =  \textbf{g}_{i}^{t} * \tanh( \textbf{s}_{c}^{t}) \]
 
 Normal Layer Output
-\[ \textbf{a}_{n} = W_{n}\textbf{o} \]
-\[ \textbf{n} = \sigma( \textbf{a}_{n}) \]
+\[ \textbf{a}_{n}^{t} = W_{n}\textbf{o}^{t} \]
+\[ \textbf{n}^{t} = \sigma( \textbf{a}_{n}^{t}) \]
 
 \subsection{Backpropagation}
-\(\delta_{k}^{L+1}\) represents the error backpropogating from the above layer. 
-As with before, \(*\) represents a pointwise multiplication.
+\(\delta_{k}^{t,l+1}\) represents the error backpropogating from the above layer
+in the current time step. 
+As with before, \(*\) represents a pointwise multiplication. The \(\delta\) variables
+represent vectors for the whole layer.
 
 Cell Output
-\[  \delta_{n} = \delta_{k}^{L+1}*\tanh'({\textbf{a}_{n}}) \]
-\[ \delta_{h} = W_{i,h}^{T}\delta_{i}^{t+1} +  W_{f,h}^{T}\delta_{f}^{t+1} +  W_{o,h}^{T}\delta_{o}^{t+1} +  W_{c,h}^{T}\delta_{s}^{t+1} \]
-\[ \frac{\partial L}{\partial \textbf{o}} = W_{n}^{T} \delta_{n} +  \delta_{h} \]
+\[  \delta_{n}^{t} = \delta_{k}^{t,l+1}*\tanh'({\textbf{a}_{n}^{t}}) \]
+\[ \delta_{h}^{t} = W_{i,o}^{T}\delta_{i}^{t+1} +  W_{f,o}^{T}\delta_{f}^{t+1} +  W_{o,o}^{T}\delta_{o}^{t+1} +  W_{c,o}^{T}\delta_{s}^{t+1} \]
+\[ \frac{\partial L}{\partial \textbf{o}^{t}} = W_{n}^{T} \delta_{n}^{t} +  \delta_{h}^{t} \]
+
+Cell State
+\[ \delta_{c}^{t} = \textbf{g}_{o}^{t} * \tanh'({\textbf{s}_{c}^{t}}) * \delta_{h}^{t} * \delta_{c}^{t+1} * \textbf{g}_{f}^{t+1} \]
+\[ \delta_{s}^{t} = \textbf{g}_{i}^{t} * \sigma'(\textbf{a}_{c}^{t}) * \delta_{c}^{t} \]
 
 Gates
-\[ \delta_{o} = \sigma'(\textbf{a}_{o}) * \tanh( \textbf{s}_{c}) *  \frac{\partial L}{\partial \textbf{o}} \]
+\[ \delta_{o}^{t} = \sigma'(\textbf{a}_{o}^{t}) * \tanh( \textbf{s}_{c}^{t}) * \frac{\partial L}{\partial \textbf{o}^{t}} \]
+\[ \delta_{f}^{t} = \sigma'(\textbf{a}_{f}^{t}) * \textbf{s}_{c}^{t-1} * \delta_{c}^{t} \]
+\[ \delta_{i}^{t} = \sigma'(\textbf{a}_{i}^{t}) * \sigma'( \textbf{a}_{c}^{t}) * \delta_{c}^{t} \]
 
-BLAH
+Input
+\[  \delta_{k}^{t,l} = W_{i,x}^{T}\delta_{i}^{t} +  W_{f,x}^{T}\delta_{f}^{t} +  W_{o,x}^{T}\delta_{o}^{t} +  W_{c,x}^{T}\delta_{s}^{t} \]
 
-\section{Training}
+
+\subsection{Training}
 
 We trained our network using BPTT (backpropogation through time) and
-gradient descent with momentum.
+gradient descent with momentum. All weights are randomly initialized
+in the range [-0.1, 0.1].
 
-\section{Decoding}
+Training inputs (acceleration values) are directly presented to
+the network on the lowest layer. We present training labels 
+to the network as a one-hot vector representing the
+gesture to the network at all time steps.
+
+\subsection{Decoding}
+
+To retrieve a single gesture prediction from the network,
+we run a forward pass and collect the network outputs. 
+Then, we average the network outputs
+across time and select the class with the maximum average response.
+
+\[ class = argmax_{i}(\sum_{t} o_{i}^{t}) \]
+
+A problem with this approach is that our network does not
+explicitly model this prediction rule. 
+
+An alternative (and something to try in the future) would
+be to build in a softmax into the network architecture as done
+in Vinyals et al. [2], and change our loss function to reflect
+this prediction rule and re-derive the backpropogation error.
+
+\section{Results}
+
+As we collected data ourselves, there were no avilable datasets
+online to compare our architecture against.
 
 \section{Example \LaTeX stuff}
 \begin{itemize}
-\item Item  Example 1
+\item Item Example 1
 \item Item Example 2
 \end{itemize}
 
