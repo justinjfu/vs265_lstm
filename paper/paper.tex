@@ -7,6 +7,8 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 
+\DeclareMathOperator*{\argmax}{arg\,max}
+
 %\setlength\titlebox{5cm}
 
 % You can expand the titlebox if you need extra space
@@ -43,13 +45,19 @@
 
 Intro goes here.
 
+Potential applications of this project include making
+phones more intuitive to use. For example, imagine 
+phones that automatically unlock and lock when you take 
+them in and out of your pocket, picking up calls by just
+bringing it up to your ear, etc.
+
 \section{Data}
 
 We collected accelerometer data streamed from a smartphone.
 Specifically, we only considered values in the X and Y directions
 as seen from the perspective of the phone. 
 
-<insert picture of phone with axes labeled>
+Insert picture of phone with axes labeled
 
 We implemented X different gestures, with Y examples of each.
 
@@ -57,7 +65,7 @@ We implemented X different gestures, with Y examples of each.
 \label{sect:pdf}
 
 We implemented an LSTM (long short term memory) network based on
-the architectures proposed by Graves [1]. Specifically,
+the architecture proposed by Graves [1]. Specifically,
 our network contains the forget, input, and output gates, but lacks the
 peephole connections that connect the internal cell state to these gates
 (as done in Vinyals et al. [2]).
@@ -107,7 +115,7 @@ Cell State
 Cell Output (Hidden State)
 \[ \textbf{o}^{t} =  \textbf{g}_{i}^{t} * \tanh( \textbf{s}_{c}^{t}) \]
 
-Normal Layer Output
+Second (Normal Neural Network) Layer Output
 \[ \textbf{a}_{n}^{t} = W_{n}\textbf{o}^{t} \]
 \[ \textbf{n}^{t} = \sigma( \textbf{a}_{n}^{t}) \]
 
@@ -134,11 +142,23 @@ Gates
 Input
 \[  \delta_{k}^{t,l} = W_{i,x}^{T}\delta_{i}^{t} +  W_{f,x}^{T}\delta_{f}^{t} +  W_{o,x}^{T}\delta_{o}^{t} +  W_{c,x}^{T}\delta_{s}^{t} \]
 
+\subsection{Gradient}
+
+The gradient of a matrix \(W\) is calculated by
+taking the outer product of its input and the delta
+of its output.
+
+Example (Second layer weights) - 
+\[ \frac{\partial L}{\partial W_{n}} = outer(\textbf{o}^{t}, \delta_{n}^{t} ) \]
+
+These gradients are summed over all time steps and
+all training examples for per weight update.
 
 \subsection{Training}
 
 We trained our network using BPTT (backpropogation through time) and
-gradient descent with momentum. All weights are randomly initialized
+gradient descent with momentum, using the equations described in
+the previous section. All weights are randomly initialized
 in the range [-0.1, 0.1].
 
 Training inputs (acceleration values) are directly presented to
@@ -151,22 +171,39 @@ gesture to the network at all time steps.
 To retrieve a single gesture prediction from the network,
 we run a forward pass and collect the network outputs. 
 Then, we average the network outputs
-across time and select the class with the maximum average response.
+across time and select the class \(c\) with the maximum average response.
 
-\[ class = argmax_{i}(\sum_{t} o_{i}^{t}) \]
+\[ c = \argmax_{i}(\sum_{t} o_{i}^{t}) \]
 
 A problem with this approach is that our network does not
 explicitly model this prediction rule. 
 
 An alternative (and something to try in the future) would
 be to build in a softmax into the network architecture as done
-in Vinyals et al. [2], and change our loss function to reflect
+in Vinyals et al. [2], and change our objective function to reflect
 this prediction rule and re-derive the backpropogation error.
 
 \section{Results}
 
 As we collected data ourselves, there were no avilable datasets
 online to compare our architecture against.
+
+Talk about training and test set sizes.
+
+\begin{table}[h]
+\begin{center}
+\begin{tabular}{|l|l|l|}
+\hline \bf Network Layers & \bf blah & \bf Test Set Error \\ \hline
+2 & blah & 10.23\% \\
+2/3/2 & blah & 5.32\% \\
+\hline
+\end{tabular}
+\end{center}
+\caption{\label{font-table} Results }
+\end{table}
+
+\section{Conclusion}
+
 
 \section{Example \LaTeX stuff}
 \begin{itemize}
