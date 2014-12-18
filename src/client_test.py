@@ -19,11 +19,11 @@ def collect_data(host='', port=5555, SAMPLE_PERIOD=0.05):
         try:
             message, address = s.recvfrom(8192)
             message_parts = message.replace(" ","").split(",")
-            Time, AccX, AccY = float(message_parts[0]), float(message_parts[2]), float(message_parts[3])
+            Time, AccX, AccY = float(message_parts[0]), float(message_parts[14]), float(message_parts[15])
             mini_sample[0] += 1.0
             mini_sample[1] += AccX
             mini_sample[2] += AccY
-            print (message)
+            print (Time, AccX, AccY)
             if Time - start_time >= SAMPLE_PERIOD:
                 averaged_sample = [Time,mini_sample[1]/mini_sample[0],mini_sample[2]/mini_sample[0]]
                 print "MINI SAMPLE:", averaged_sample
@@ -43,7 +43,7 @@ def collect_data(host='', port=5555, SAMPLE_PERIOD=0.05):
 if __name__ == "__main__":
     data = []
     while True:
-        usr_in = raw_input("Press Enter to Start Recording A Sample, 'q' to Exit Program")
+        usr_in = raw_input("Press Enter to Start Recording A Sample %d, 'q' to Exit Program" % (len(data)+1))
         if usr_in == "":
             data.append(collect_data())
         elif usr_in.lower() == "q":

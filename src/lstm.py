@@ -1,10 +1,10 @@
 import numpy as np
 from objective import Objective, Weights
-from activations import Logistic, Tanh
+from activations import Logistic, Tanh, Softmax
 from collections import namedtuple
 from descend import gd
 
-WEIGHT_INIT_RANGE = 0.1
+WEIGHT_INIT_RANGE = 0.5
 
 
 class LSTMObjective(Objective):
@@ -114,13 +114,24 @@ class LSTMNetwork(object):
         outputs = self.forward_across_time(trainingIn)
         error = 0
         for i in range(len(trainingIn)):
-            diff = np.array(outputs[i]) - trainingOut[i].reshape(outputs[i].shape)
-            diff = np.linalg.norm(diff)
-            error += 0.5*diff*diff
+            #import pdb; pdb.set_trace()
+            labels = trainingOut[i].reshape(outputs[i].shape)
+            predicted = Softmax.softmax(outputs[i])
+            #diff = predicted - labels
+            e = -labels*np.log(predicted)
+            error += np.sum(e)
+            #diff = np.linalg.norm(diff)
+            #error += 0.5*diff*diff
         return error, outputs
 
     def output_backprop_error(self, output, trainingOut):
-        return -(trainingOut.reshape(output.shape) - np.array(output))
+        #return -(trainingOut.reshape(output.shape) - np.array(output))
+        #return output-trainingOut.reshape(output.shape)
+        labels = trainingOut.reshape(output.shape)
+        predicted = Softmax.softmax(output)
+        return (predicted-labels)
+        #labels = trainingOut.reshape(output.shape)
+        #return -labels*(1-output) + (1-labels)*output
 
     def to_weights_array(self):
         return [x.to_weights_array() for x in self.layers]
@@ -477,10 +488,10 @@ if __name__ == '__main__':
     lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
     #lstm = LSTMNetwork([lstm_layer1])
 
-    """
+
     for trial in range(1000):
-        #import pdb; pdb.set_trace()
-        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 5e-6)
+        import pdb; pdb.set_trace()
+        lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 5e-6)
         d_weights = lstm.gradient(trainingIn, trainingOut)
         lstm.update_layer_weights(d_weights, K=-1)
         if (trial+1) % 100 == 0:
@@ -488,10 +499,13 @@ if __name__ == '__main__':
             print "Trial =", trial+1
             print err
             print output
+
+
     """
     wt = LSTMWeights(lstm.to_weights_array())
     obj = LSTMObjective(trainingIn, trainingOut, lstm)
     wt = gd(obj, wt, iters=1000, heartbeat=100, learning_rate = 0.5, momentum_rate = 0.5)
+    """
 
     print "FINAL WEIGHTS"
     final_weights = lstm.layers[0].to_weights_array()

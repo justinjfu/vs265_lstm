@@ -2,6 +2,7 @@ from lstm import *
 import numpy as np
 from client_test import collect_data
 import argparse, pickle
+from activations import *
 
 
 if __name__ == '__main__':
@@ -15,21 +16,25 @@ if __name__ == '__main__':
    
     with open(args.LSTMNetwork, 'rb') as f:
         lstm = pickle.load(f)
+    print lstm.to_weights_array()
 
     while True:
         usr_in = raw_input("Press Enter to Start Recording A Sample and Test it, 'q' to Exit Program")
         if usr_in == "":
             trainingIn = collect_data()
-            gravity = np.array([0,9.8])
 
-            trainingIn_shaped = [np.array([point[1:] - gravity for point in trainingIn]).reshape(len(trainingIn),2,1)]
-            output = lstm.forward_across_time(trainingIn_shaped)[0]
-            val = np.sum(output)/len(output)
-            if val > THRESH:
+            trainingIn_shaped = [np.array([point[1:] for point in trainingIn]).reshape(len(trainingIn),2,1)]
+            output = lstm.forward_across_time(trainingIn_shaped)
+            #val = np.sum(output[-10:])/10
+            sumval = np.sum(output[0], axis=0)
+            print Softmax.softmax(sumval)
+
+            #print Softmax.softmax(output[0])
+            #print output[0]
+            if sumval[0] > sumval[1]:
                 print "RECOGNIZED:",class1
             else:
                 print "RECOGNIZED:",class2
-            print val
         elif usr_in.lower() == "q":
             break
 
