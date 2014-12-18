@@ -4,39 +4,34 @@ import numpy as np
 from descend import gd
 import argparse, pickle, socket, traceback 
 
+def onehot(i, N):
+    v = [0]*N
+    v[i] = 1.0
+    return v
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train an LSTMNetwork")
-    parser.add_argument('trainingIn1')
-    parser.add_argument('trainingIn2')
-    parser.add_argument('trainingIn3')
+    parser.add_argument('trainingFiles')
 
     args = parser.parse_args()
-   
-    with open(args.trainingIn1, 'rb') as f:
-        trainingIn1 = pickle.load(f)
-    with open(args.trainingIn2, 'rb') as f:
-        trainingIn2 = pickle.load(f)
-    with open(args.trainingIn3, 'rb') as f:
-        trainingIn3 = pickle.load(f)
 
-    #gravity = np.array([0,9.8])
-    trainingIn1_shaped = [np.array([point[1:] for point in blah]).reshape(len(blah),2,1) for blah in trainingIn1]
-    trainingIn2_shaped = [np.array([point[1:] for point in blah]).reshape(len(blah),2,1) for blah in trainingIn2]
-    trainingIn3_shaped = [np.array([point[1:] for point in blah]).reshape(len(blah),2,1) for blah in trainingIn3]
+    trainingIn = []
+    trainingOut = []
 
-    #trainingOut1_shaped = [np.array([[1,0] if i > len(blah)/2 else [0,0] for i in range(len(blah))]) for blah in trainingIn1]
-    #trainingOut2_shaped = [np.array([[0,1] if i > len(blah)/2 else [0,0] for i in range(len(blah))]) for blah in trainingIn2]
-    trainingOut1_shaped = [np.array([[1, 0,0] for i in range(len(blah))]) for blah in trainingIn1_shaped]
-    trainingOut2_shaped = [np.array([[0, 1,0] for i in range(len(blah))]) for blah in trainingIn2_shaped]
-    trainingOut3_shaped = [np.array([[0, 0,1] for i in range(len(blah))]) for blah in trainingIn3_shaped]
-
-    trainingIn = trainingIn1_shaped + trainingIn2_shaped + trainingIn3_shaped
-    trainingOut = trainingOut1_shaped + trainingOut2_shaped + trainingOut3_shaped
-
+    fidx=0
+    files = args.trainingFiles.split(',')
+    for file in files:
+        with open(file, 'rb') as f:
+            training = pickle.load(f)
+            #import pdb; pdb.set_trace()
+            training_shaped = [np.array([point[1:] for point in blah]).reshape(len(blah),2,1) for blah in training]
+            training_out = [np.array([onehot(fidx,len(files)) for i in range(len(blah))]) for blah in training_shaped]
+            trainingIn.extend(training_shaped)
+            trainingOut.extend(training_out)
+            fidx+=1
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(5, 2, 3, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(8, 2, len(files), f, g, h)
     lstm_layer2 = LSTMLayerWeights(10, 10, 3, f, g, h)
     lstm_layer3 = LSTMLayerWeights(4, 6, 1, f, g, h)
 

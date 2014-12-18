@@ -8,9 +8,10 @@ from activations import *
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train an LSTMNetwork")
     parser.add_argument('LSTMNetwork')
+    parser.add_argument('class_names')
     args = parser.parse_args()
     
-    classes = ["M", "Z", "O"]
+    classes = args.class_names.split(',')
     THRESH = 0.5
    
     with open(args.LSTMNetwork, 'rb') as f:
