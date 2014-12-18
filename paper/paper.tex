@@ -80,6 +80,14 @@ peephole connections that connect the internal cell state to these gates
 We then interleave layers of LSTM units with
 normal network layers to create a multilayer network.
 
+\begin{figure}[ht]
+\caption{Diagram of one interleaved layer of our network. LSTM 
+cells are represented as squares and normal neurons are represented
+as circles.}
+  \centering
+    \includegraphics[width=0.5\textwidth]{lstm_network}
+\end{figure}
+
 \subsection{Equations}
 
 We used squared error as our objective function. \(O\) is the network
@@ -156,7 +164,7 @@ its output, \(\textbf{a}_{n}\) has the delta \(\delta_{n}^{t}\)
 \[ \frac{\partial L}{\partial W_{n}} = outer(\textbf{o}^{t}, \delta_{n}^{t} ) \]
 
 These gradients are summed over all time steps and
-all training examples for per weight update.
+all training examples per weight update.
 
 \subsection{Training}
 
@@ -290,7 +298,8 @@ separating the footnotes from the text.}
 
 \section*{Additional Materials}
 
-Our code is hosted on https://github.com/justinjfu/lstm
+Our code and datasets are hosted on 
+https://github.com/justinjfu/lstm
 
 \section*{Acknowledgments}
 
