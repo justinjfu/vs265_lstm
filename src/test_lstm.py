@@ -27,7 +27,10 @@ if __name__ == '__main__':
             output = lstm.forward_across_time(trainingIn_shaped)
             #val = np.sum(output[-10:])/10
             sumval = np.sum(output[0], axis=0)
-            print Softmax.softmax(sumval)
+            sumval = Softmax.softmax(sumval)
+            for i in range(len(classes)):
+                print '%s : %f'% (classes[i], sumval[i])
+            #print Softmax.softmax(sumval)
 
             #print Softmax.softmax(output[0])
             #print output[0]

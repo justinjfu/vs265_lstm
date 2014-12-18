@@ -31,7 +31,7 @@ if __name__ == '__main__':
             fidx+=1
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(8, 2, len(files), f, g, h)
+    lstm_layer1 = LSTMLayerWeights(10, 2, len(files), f, g, h)
     lstm_layer2 = LSTMLayerWeights(10, 10, 3, f, g, h)
     lstm_layer3 = LSTMLayerWeights(4, 6, 1, f, g, h)
 
