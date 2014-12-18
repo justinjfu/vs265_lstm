@@ -37,13 +37,14 @@
   Recurrent neural networks provide a natural way to model time
   sequences, and the LSTM architecture in particular provides a way
   to model long-range dependencies that are prevalent in
-  the gestures we tested. We imlemented X gestures, and achieve an
+  the gestures we tested. TODO: We imlemented X gestures, and achieve an
   accuracy of X percent on the test set we generated.
 \end{abstract}
 
 \section{Introduction}
 
-Intro goes here.
+TODO: Intro goes here. Talk about why this problem is
+hard/interesting, and possibly some recent work.
 
 Potential applications of this project include making
 phones more intuitive to use. For example, imagine 
@@ -57,9 +58,9 @@ We collected accelerometer data streamed from a smartphone.
 Specifically, we only considered values in the X and Y directions
 as seen from the perspective of the phone. 
 
-Insert picture of phone with axes labeled
+TODO: Insert picture of phone with axes labeled
 
-We implemented X different gestures, with Y examples of each.
+TODO: We implemented X different gestures, with Y examples of each.
 
 \section{Model}
 \label{sect:pdf}
@@ -115,7 +116,7 @@ Cell State
 Cell Output (Hidden State)
 \[ \textbf{o}^{t} =  \textbf{g}_{i}^{t} * \tanh( \textbf{s}_{c}^{t}) \]
 
-Second (Normal Neural Network) Layer Output
+Normal Network Layer Output
 \[ \textbf{a}_{n}^{t} = W_{n}\textbf{o}^{t} \]
 \[ \textbf{n}^{t} = \sigma( \textbf{a}_{n}^{t}) \]
 
@@ -148,7 +149,10 @@ The gradient of a matrix \(W\) is calculated by
 taking the outer product of its input and the delta
 of its output.
 
-Example (Second layer weights) - 
+For example, here is the derivative of the matrix of
+the normal layer output \(W_{n}\). The input to
+this matrix are the cell outputs \(\textbf{o}^{t}\) and
+its output, \(\textbf{a}_{n}\) has the delta \(\delta_{n}^{t}\)
 \[ \frac{\partial L}{\partial W_{n}} = outer(\textbf{o}^{t}, \delta_{n}^{t} ) \]
 
 These gradients are summed over all time steps and
@@ -188,7 +192,7 @@ this prediction rule and re-derive the backpropogation error.
 As we collected data ourselves, there were no avilable datasets
 online to compare our architecture against.
 
-Talk about training and test set sizes.
+TODO: Talk about training and test set sizes.
 
 \begin{table}[h]
 \begin{center}
@@ -202,7 +206,13 @@ Talk about training and test set sizes.
 \caption{\label{font-table} Results }
 \end{table}
 
+TODO: Talk about specific errors - ex. are there any gestures
+that are commonly confused?
+
 \section{Conclusion}
+
+TODO: How successful was the project?
+TODO: Future directions.
 
 
 \section{Example \LaTeX stuff}
@@ -278,6 +288,9 @@ symbols.\footnote{This is how a footnote should appear.} Footnotes
 should be separated from the text by a line.\footnote{Note the line
 separating the footnotes from the text.}
 
+\section*{Additional Materials}
+
+Our code is hosted on https://github.com/justinjfu/lstm
 
 \section*{Acknowledgments}
 
