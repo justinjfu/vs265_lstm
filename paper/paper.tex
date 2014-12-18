@@ -37,7 +37,7 @@
   Recurrent neural networks provide a natural way to model time
   sequences, and the LSTM architecture in particular provides a way
   to model long-range dependencies that are prevalent in
-  the gestures we tested. TODO: We imlemented S gestures, and achieve an
+  the gestures we tested. TODO: We imlemented 6 gestures, and achieve an
   accuracy of X percent on the test set we generated.
 \end{abstract}
 
@@ -190,22 +190,20 @@ gesture to the network at all time steps.
 
 To retrieve a single gesture prediction from the network,
 we run a forward pass and collect the network outputs. 
-Then, we average the network outputs after a softmax
-across time and select the class \(c\) with the maximum average response.
+Then, we average the network outputs across time, use a softmax,
+and select the class \(c\) with the maximum average response.
 
-\[ c = \argmax_{i}(\sum_{t} o_{i}^{t}) \]
-
-A problem with this approach is that our network does not
-explicitly model the summation over outputs. An approach to try is to
-backpropogate the error from this decision rule, but the network
-worked fine without it.
+\[ c = \argmax_{i}(softmax(\sum_{t} o_{i}^{t})) \]
 
 \section{Results}
 
 As we collected data ourselves, there were no avilable datasets
-online to compare our architecture against.
+online to compare our architecture against. As mentioned before, 
+out training set consisted of 26 instances of each letter, and
+our test set contains 10.
 
-TODO: Talk about training and test set sizes.
+The network we trained was contained a single layer with 10 LSTM
+units and 6 normal units.
 
 \begin{table}[h]
 \begin{center}
@@ -220,7 +218,7 @@ S & blah & 5.32\% \\
 \hline
 \end{tabular}
 \end{center}
-\caption{\label{font-table} Results }
+\caption{\label{font-table} 10-unit single layer network. }
 \end{table}
 
 TODO: Talk about specific errors - ex. are there any gestures
@@ -228,7 +226,6 @@ that are commonly confused?
 
 \section{Conclusion}
 
-TODO: How successful was the project?
 TODO: Future directions.
 
 
