@@ -23,7 +23,6 @@ if __name__ == '__main__':
     for file in files:
         with open(file, 'rb') as f:
             training = pickle.load(f)
-            #import pdb; pdb.set_trace()
             training_shaped = [np.array([point[1:] for point in blah]).reshape(len(blah),2,1) for blah in training]
             training_out = [np.array([onehot(fidx,len(files)) for i in range(len(blah))]) for blah in training_shaped]
             trainingIn.extend(training_shaped)
@@ -31,40 +30,28 @@ if __name__ == '__main__':
             fidx+=1
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(10, 2, len(files), f, g, h)
-    lstm_layer2 = LSTMLayerWeights(10, 10, 3, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(10, 2, 10, f, g, h)
+    lstm_layer2 = LSTMLayerWeights(6, 10, len(files), f, g, h)
     lstm_layer3 = LSTMLayerWeights(4, 6, 1, f, g, h)
 
 
-    lstm = LSTMNetwork([lstm_layer1])
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
 
-    d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
-    d_weights = [d_weight1]
-
-    """
-    for trial in range(100):
-        #import pdb; pdb.set_trace()
-        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
-        d_weights = lstm.gradient(trainingIn, trainingOut)
-        lstm.update_layer_weights(d_weights, K=-0.0001)
-        if (trial+1) % 1 == 0:
-            err, output = lstm.eval_objective(trainingIn, trainingOut)
-            print "Trial =", trial+1
-            print err
-            #print output
-            print Softmax.softmax(output[-1][-1])
-            print trainingOut[-1][-1]
-    """
+    with open('gestures3.lstm', 'rb') as f:
+        lstm = pickle.load(f)
 
     wt = LSTMWeights(lstm.to_weights_array())
     obj = LSTMObjective(trainingIn, trainingOut, lstm)
-    wt = gd(obj, wt, iters=500, heartbeat=5, learning_rate = 0.0005, momentum_rate = 0.1)
+    def callback(i):
+        with open('gestures3.lstm', 'wb') as datfile:
+            pickle.dump(lstm, datfile)
+    wt = gd(obj, wt, iters=1000, heartbeat=2, learning_rate = 0.0030, momentum_rate = 0.1, callback=callback)
 
     print "FINAL WEIGHTS"
     final_weights = lstm.layers[0].to_weights_array()
     for final_wt in final_weights:
         print final_wt
         print ""
-    with open('gestures.lstm', 'wb') as datfile:
+    with open('gestures3.lstm', 'wb') as datfile:
         pickle.dump(lstm, datfile)
 

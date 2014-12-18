@@ -1,7 +1,7 @@
 import time
 
 def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
-       learning_rate=1e-2, momentum_rate=0.0):
+       learning_rate=1e-2, momentum_rate=0.0, callback=None):
     """
     Perform a simple gradient descent with momentum.
 
@@ -35,6 +35,8 @@ def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
             last_time = current_time
             if save_to_file:
                 weights.save_to_file(save_to_file)
+            if callback:
+                callback(i)
 
     end_time = time.time()
     print 'Total time elapsed: ', end_time-start_time
