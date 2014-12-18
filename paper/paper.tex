@@ -37,7 +37,7 @@
   Recurrent neural networks provide a natural way to model time
   sequences, and the LSTM architecture in particular provides a way
   to model long-range dependencies that are prevalent in
-  the gestures we tested. TODO: We imlemented X gestures, and achieve an
+  the gestures we tested. TODO: We imlemented S gestures, and achieve an
   accuracy of X percent on the test set we generated.
 \end{abstract}
 
@@ -58,9 +58,16 @@ We collected accelerometer data streamed from a smartphone.
 Specifically, we only considered values in the X and Y directions
 as seen from the perspective of the phone. 
 
-TODO: Insert picture of phone with axes labeled
+\begin{figure}[ht]
+\caption{Directions of each axis on the phone}
+  \centering
+    \includegraphics[width=0.5\textwidth]{phone_axis}
+\end{figure}
 
-TODO: We implemented X different gestures, with Y examples of each.
+We implemented 6 different gestures representing some letters of
+the alphabet (M, Z, O, L, J, and S). Our training set contains
+26 instances of each letter and our test set contains 10, for
+a total of 216 examples. 
 
 \section{Model}
 \label{sect:pdf}
@@ -79,6 +86,7 @@ peephole connections that connect the internal cell state to these gates
 
 We then interleave layers of LSTM units with
 normal network layers to create a multilayer network.
+The output of the final layer is then fed through a softmax function.
 
 \begin{figure}[ht]
 \caption{Diagram of one interleaved layer of our network. LSTM 
@@ -90,13 +98,13 @@ as circles.}
 
 \subsection{Equations}
 
-We used squared error as our objective function. \(O\) is the network
-output and \(Y\) is the training label. \(n\) sums over each
+We used cross-entropy as our objective function. \(O\) is the network
+output after the softmax and \(Y\) is the training label. \(n\) sums over each
 training example, \(t\) sums over time, and \(i\) sums over the dimensions
 of each training example at a given timestep.
 Note that \(t\) varies with each training example.
 
-\[  L(Y, O) = \sum_{n}^{N}  \sum_{t}^{len(O^{n})} \sum_{i}^{I} \frac{1}{2} (o_{i}^{n,t} - y_{i}^{n,t})^{2} \]
+\[  L(Y, O) = \sum_{n}^{N}  \sum_{t}^{len(O^{n})} \sum_{i}^{I} y_{i}^{n,t}*\ln(o_{i}^{n,t}) \]
 
 Most of the equations on the forward and backward passes are the
 same as those in Graves [1], but some were missing from his paper
@@ -182,18 +190,15 @@ gesture to the network at all time steps.
 
 To retrieve a single gesture prediction from the network,
 we run a forward pass and collect the network outputs. 
-Then, we average the network outputs
+Then, we average the network outputs after a softmax
 across time and select the class \(c\) with the maximum average response.
 
 \[ c = \argmax_{i}(\sum_{t} o_{i}^{t}) \]
 
 A problem with this approach is that our network does not
-explicitly model this prediction rule. 
-
-An alternative (and something to try in the future) would
-be to build in a softmax into the network architecture as done
-in Vinyals et al. [2], and change our objective function to reflect
-this prediction rule and re-derive the backpropogation error.
+explicitly model the summation over outputs. An approach to try is to
+backpropogate the error from this decision rule, but the network
+worked fine without it.
 
 \section{Results}
 
@@ -205,9 +210,13 @@ TODO: Talk about training and test set sizes.
 \begin{table}[h]
 \begin{center}
 \begin{tabular}{|l|l|l|}
-\hline \bf Network Layers & \bf blah & \bf Test Set Error \\ \hline
-2 & blah & 10.23\% \\
-2/3/2 & blah & 5.32\% \\
+\hline \bf Gesture & \bf Number Correct & \bf Error \% \\ \hline
+Z & blah & 10.23\% \\
+O & blah & 5.32\% \\
+M & blah & 5.32\% \\
+L & blah & 5.32\% \\
+J & blah & 5.32\% \\
+S & blah & 5.32\% \\
 \hline
 \end{tabular}
 \end{center}
