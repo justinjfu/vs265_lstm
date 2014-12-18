@@ -27,17 +27,17 @@ if __name__ == '__main__':
 
     #trainingOut1_shaped = [np.array([[1,0] if i > len(blah)/2 else [0,0] for i in range(len(blah))]) for blah in trainingIn1]
     #trainingOut2_shaped = [np.array([[0,1] if i > len(blah)/2 else [0,0] for i in range(len(blah))]) for blah in trainingIn2]
-    trainingOut1_shaped = [np.array([[1, 0] for i in range(len(blah))]) for blah in trainingIn1_shaped]
-    trainingOut2_shaped = [np.array([[0, 1] for i in range(len(blah))]) for blah in trainingIn2_shaped]
+    trainingOut1_shaped = [np.array([[1, 0,0] for i in range(len(blah))]) for blah in trainingIn1_shaped]
+    trainingOut2_shaped = [np.array([[0, 1,0] for i in range(len(blah))]) for blah in trainingIn2_shaped]
     trainingOut3_shaped = [np.array([[0, 0,1] for i in range(len(blah))]) for blah in trainingIn3_shaped]
 
-    trainingIn = trainingIn1_shaped + trainingIn2_shaped #+ trainingIn3_shaped
-    trainingOut = trainingOut1_shaped + trainingOut2_shaped #+ trainingOut3_shaped
+    trainingIn = trainingIn1_shaped + trainingIn2_shaped + trainingIn3_shaped
+    trainingOut = trainingOut1_shaped + trainingOut2_shaped + trainingOut3_shaped
 
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(2, 2, 2, f, g, h)
-    lstm_layer2 = LSTMLayerWeights(5, 5, 3, f, g, h)
+    lstm_layer1 = LSTMLayerWeights(5, 2, 3, f, g, h)
+    lstm_layer2 = LSTMLayerWeights(10, 10, 3, f, g, h)
     lstm_layer3 = LSTMLayerWeights(4, 6, 1, f, g, h)
 
 
@@ -51,7 +51,7 @@ if __name__ == '__main__':
         #import pdb; pdb.set_trace()
         #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 1e-5)
         d_weights = lstm.gradient(trainingIn, trainingOut)
-        lstm.update_layer_weights(d_weights, K=-0.001)
+        lstm.update_layer_weights(d_weights, K=-0.0001)
         if (trial+1) % 1 == 0:
             err, output = lstm.eval_objective(trainingIn, trainingOut)
             print "Trial =", trial+1
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     wt = LSTMWeights(lstm.to_weights_array())
     obj = LSTMObjective(trainingIn, trainingOut, lstm)
-    wt = gd(obj, wt, iters=300, heartbeat=5, learning_rate = 0.001, momentum_rate = 0.1)
+    wt = gd(obj, wt, iters=500, heartbeat=5, learning_rate = 0.0005, momentum_rate = 0.1)
 
     print "FINAL WEIGHTS"
     final_weights = lstm.layers[0].to_weights_array()

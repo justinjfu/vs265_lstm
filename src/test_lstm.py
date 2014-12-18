@@ -10,8 +10,7 @@ if __name__ == '__main__':
     parser.add_argument('LSTMNetwork')
     args = parser.parse_args()
     
-    class1 = "Z"
-    class2 = "O"
+    classes = ["M", "Z", "O"]
     THRESH = 0.5
    
     with open(args.LSTMNetwork, 'rb') as f:
@@ -31,10 +30,7 @@ if __name__ == '__main__':
 
             #print Softmax.softmax(output[0])
             #print output[0]
-            if sumval[0] > sumval[1]:
-                print "RECOGNIZED:",class1
-            else:
-                print "RECOGNIZED:",class2
+            print "RECOGNIZED:", classes[ np.argmax(sumval)]
         elif usr_in.lower() == "q":
             break
 
