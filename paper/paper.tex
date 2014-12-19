@@ -154,18 +154,18 @@ As with before, \(*\) represents a pointwise multiplication. The \(\delta\) vari
 represent vectors for the whole layer.
 
 Cell Output
-\[  \delta_{n}^{t} = \delta_{k}^{t,l+1}*\tanh'({\textbf{a}_{n}^{t}}) \]
+\[  \delta_{n}^{t} = \frac{\partial L}{\partial \textbf{a}_{n}^{t}} = \delta_{k}^{t,l+1}*\tanh'({\textbf{a}_{n}^{t}}) \]
 \[ \delta_{h}^{t} = W_{i,o}^{T}\delta_{i}^{t+1} +  W_{f,o}^{T}\delta_{f}^{t+1} +  W_{o,o}^{T}\delta_{o}^{t+1} +  W_{c,o}^{T}\delta_{s}^{t+1} \]
 \[ \frac{\partial L}{\partial \textbf{o}^{t}} = W_{n}^{T} \delta_{n}^{t} +  \delta_{h}^{t} \]
 
 Cell State
-\[ \delta_{c}^{t} = \textbf{g}_{o}^{t} * \tanh'({\textbf{s}_{c}^{t}}) * \delta_{h}^{t} * \delta_{c}^{t+1} * \textbf{g}_{f}^{t+1} \]
-\[ \delta_{s}^{t} = \textbf{g}_{i}^{t} * \sigma'(\textbf{a}_{c}^{t}) * \delta_{c}^{t} \]
+\[ \delta_{c}^{t} = \frac{\partial L}{\partial \textbf{s}_{c}^{t}} = \textbf{g}_{o}^{t} * \tanh'({\textbf{s}_{c}^{t}}) * \frac{\partial L}{\partial \textbf{o}^{t}} + \delta_{c}^{t+1} * \textbf{g}_{f}^{t+1} \]
+\[ \delta_{s}^{t} = \frac{\partial L}{\partial \textbf{a}_{c}^{t}} = \textbf{g}_{i}^{t} * \sigma'(\textbf{a}_{c}^{t}) * \delta_{c}^{t} \]
 
 Gates
-\[ \delta_{o}^{t} = \sigma'(\textbf{a}_{o}^{t}) * \tanh( \textbf{s}_{c}^{t}) * \frac{\partial L}{\partial \textbf{o}^{t}} \]
-\[ \delta_{f}^{t} = \sigma'(\textbf{a}_{f}^{t}) * \textbf{s}_{c}^{t-1} * \delta_{c}^{t} \]
-\[ \delta_{i}^{t} = \sigma'(\textbf{a}_{i}^{t}) * \sigma'( \textbf{a}_{c}^{t}) * \delta_{c}^{t} \]
+\[ \delta_{o}^{t} = \frac{\partial L}{\partial \textbf{a}_{o}^{t}} = \sigma'(\textbf{a}_{o}^{t}) * \tanh( \textbf{s}_{c}^{t}) * \frac{\partial L}{\partial \textbf{o}^{t}} \]
+\[ \delta_{f}^{t} = \frac{\partial L}{\partial \textbf{a}_{f}^{t}} = \sigma'(\textbf{a}_{f}^{t}) * \textbf{s}_{c}^{t-1} * \delta_{c}^{t} \]
+\[ \delta_{i}^{t} = \frac{\partial L}{\partial \textbf{a}_{i}^{t}} = \sigma'(\textbf{a}_{i}^{t}) * \sigma( \textbf{a}_{c}^{t}) * \delta_{c}^{t} \]
 
 Input
 \[  \delta_{k}^{t,l} = W_{i,x}^{T}\delta_{i}^{t} +  W_{f,x}^{T}\delta_{f}^{t} +  W_{o,x}^{T}\delta_{o}^{t} +  W_{c,x}^{T}\delta_{s}^{t} \]
