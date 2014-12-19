@@ -8,12 +8,11 @@ from activations import *
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Train an LSTMNetwork")
     parser.add_argument('LSTMNetworks')
-    parser.add_argument('class_names')
+    parser.add_argument('testFiles')
     args = parser.parse_args()
-
+    classes = "M,Z,O,L,S,J".split(',')
 
     networkfiless = args.LSTMNetworks.split(',')
-    classes = args.class_names.split(',')
 
     networks = []
     for netfile in networkfiless:
@@ -22,32 +21,33 @@ if __name__ == '__main__':
             networks.append(network)
     #print lstm.to_weights_array()
 
-    while True:
-        usr_in = raw_input("Press Enter to Start Recording A Sample and Test it, 'q' to Exit Program")
-        if usr_in == "":
-            trainingIn = collect_data()
+    fidx = 0
+    files = args.testFiles.split(',')
+    for file in files:
+        with open(file, 'rb') as f:
+            training = pickle.load(f)
+            training_shaped = [np.array([point[1:] for point in blah]).reshape(len(blah),2,1) for blah in training]
 
-            trainingIn_shaped = [np.array([point[1:] for point in trainingIn]).reshape(len(trainingIn),2,1)]
+            good = 0
+            for i in range(10):
+                sumval = 0
+                for lstm in networks:
+                    output = lstm.forward_across_time(training_shaped)
+                    netout = Softmax.softmax(output[i])
+                    netout = np.sum(netout, axis=0)
+                    sumval = netout + sumval
+                sumval = sumval/np.sum(sumval)
+                argmax = np.argmax(sumval)
 
-            sumval = 0
-            for lstm in networks:
-                output = lstm.forward_across_time(trainingIn_shaped)
-                netout = Softmax.softmax(output[0])
-                netout = np.sum(netout, axis=0)
-                sumval = netout + sumval
-            sumval = sumval/np.sum(sumval)
-            for i in range(len(classes)):
-                print '%s : %f'% (classes[i], sumval[i])
-            #print Softmax.softmax(sumval)
+                if argmax == fidx:
+                    #print 'GOOD:',fidx
+                    good +=1
+                else:
+                    pass
+                    #print 'BAD:', fidx
+            print classes[fidx], ' - # Correct:', good
 
-            #print Softmax.softmax(output[0])
-            #print output[0]
-            argmax = np.argmax(sumval)
-            print "RECOGNIZED:", classes[ argmax]
-            sumval[argmax] = 0
-            print "SECOND GUESS:",classes[np.argmax(sumval)]
-        elif usr_in.lower() == "q":
-            break
+        fidx+=1
 
 
 

@@ -1,1 +1,1 @@
-python test_lstm.py gestures3.lstm,gestures2.lstm m,z,o,l,s,j
+python demo_lstm.py gestures4.lstm,gestures2.lstm,gestures.mzolsj.lstm M,Z,O,L,S,J

@@ -37,21 +37,22 @@ if __name__ == '__main__':
 
     lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
 
-    with open('gestures3.lstm', 'rb') as f:
+    with open('gestures4.lstm', 'rb') as f:
         lstm = pickle.load(f)
+        pass
 
     wt = LSTMWeights(lstm.to_weights_array())
     obj = LSTMObjective(trainingIn, trainingOut, lstm)
     def callback(i):
-        with open('gestures3.lstm', 'wb') as datfile:
+        with open('gestures4.lstm', 'wb') as datfile:
             pickle.dump(lstm, datfile)
-    wt = gd(obj, wt, iters=1000, heartbeat=2, learning_rate = 0.0030, momentum_rate = 0.1, callback=callback)
+    wt = gd(obj, wt, iters=1000, heartbeat=2, learning_rate = 0.0001, momentum_rate = 0.1, callback=callback)
 
     print "FINAL WEIGHTS"
     final_weights = lstm.layers[0].to_weights_array()
     for final_wt in final_weights:
         print final_wt
         print ""
-    with open('gestures3.lstm', 'wb') as datfile:
+    with open('gestures4.lstm', 'wb') as datfile:
         pickle.dump(lstm, datfile)
 
