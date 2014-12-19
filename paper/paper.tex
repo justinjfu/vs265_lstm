@@ -195,6 +195,12 @@ and select the class \(c\) with the maximum average response.
 
 \[ c = \argmax_{i}(softmax(\sum_{t} o_{i}^{t})) \]
 
+Since we also tried an ensemble approach, we summed the outputs
+of each network and then selected the argmax. 
+\(n\) in this equation sums over the different networks we trained.
+
+\[ c = \argmax_{i}(\sum_{n} softmax(\sum_{t} o_{i}^{t,n})) \]
+
 \section{Results}
 
 As we collected data ourselves, there were no avilable datasets
@@ -202,25 +208,28 @@ online to compare our architecture against. As mentioned before,
 out training set consisted of 26 instances of each letter, and
 our test set contains 10.
 
-The network we trained was contained a single layer with 10 LSTM
-units and 6 normal units.
+We trained 3 identical networks. Each network consists of 4 layers -
+10 LSTM units, 10 normal units, 6 LSTM units, and 6 normal units.
 
 \begin{table}[h]
 \begin{center}
 \begin{tabular}{|l|l|l|}
-\hline \bf Gesture & \bf Number Correct & \bf Error \% \\ \hline
-Z & blah & 10.23\% \\
-O & blah & 5.32\% \\
-M & blah & 5.32\% \\
-L & blah & 5.32\% \\
-J & blah & 5.32\% \\
-S & blah & 5.32\% \\
+\hline \bf Gesture & \bf Net 1 & Net 2 & Net 3 & Ensemble \bf   \\ \hline
+Z & blah & 10.23\% & 1 \\
+O & blah & 5.32\% & 1\\
+M & blah & 5.32\% & 1\\
+L & blah & 5.32\% & 1\\
+J & blah & 5.32\% & 1\\
+S & blah & 5.32\% & 1\\
 \hline
 \end{tabular}
 \end{center}
 \caption{\label{font-table} 10-unit single layer network. }
 \end{table}
 
+Since each network got trapped in a different local minimum,
+they made different errors, but the ensemble approach managed
+to sort out many of them.
 TODO: Talk about specific errors - ex. are there any gestures
 that are commonly confused?
 
@@ -235,20 +244,7 @@ TODO: Future directions.
 \item Item Example 2
 \end{itemize}
 
-\begin{table}[h]
-\begin{center}
-\begin{tabular}{|l|rl|}
-\hline \bf Column & \bf Col & \bf Col \\ \hline
-row blah & blah & blah \\
-row blah & blah & blah \\
-\hline
-\end{tabular}
-\end{center}
-\caption{\label{font-table} Example table! }
-\end{table}
-
 \noindent Noindent
-
 
 \subsection{subsection}
 
