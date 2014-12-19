@@ -213,14 +213,16 @@ We trained 3 identical networks. Each network consists of 4 layers -
 
 \begin{table}[h]
 \begin{center}
-\begin{tabular}{|l|l|l|}
-\hline \bf Gesture & \bf Net 1 & Net 2 & Net 3 & Ensemble \bf   \\ \hline
-Z & blah & 10.23\% & 1 \\
-O & blah & 5.32\% & 1\\
-M & blah & 5.32\% & 1\\
-L & blah & 5.32\% & 1\\
-J & blah & 5.32\% & 1\\
-S & blah & 5.32\% & 1\\
+\begin{tabular}{|l|l|l|l|}
+\hline \bf Gesture & \bf Net 1 & Net 2 & Net 3 & Ensemble \bf \\ \hline
+M & 0.0 & 0.0 & 0.0 & 0 \\
+Z & 0.0 & 1.0 & 0.0 & 0\\
+O & 0.2 & 0.0 & 0.4 & 0.1\\
+L & 0.9 & 0.1 & 0.0 & 0.3\\
+S & 0.2 & 0.7 & 0.2 & 0.3\\
+J & 0.1 & 0.0 & 1.0 & 0\\
+Total & 0.233 & 0.3 & 0.267 &.117\\
+
 \hline
 \end{tabular}
 \end{center}
