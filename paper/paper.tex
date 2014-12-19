@@ -208,9 +208,8 @@ and select the class \(c\) with the maximum average response.
 
 Since we also tried an ensemble approach, we summed the outputs
 of each network and then selected the argmax. 
-\(n\) in this equation sums over the different networks we trained.
 
-\[ c = \argmax_{i}(\sum_{n} softmax(\sum_{t} o_{i}^{t,n})) \]
+\[ c = \argmax_{i}(\sum_{net} softmax(\sum_{t} o_{i}^{t,net})) \]
 
 \section{Results}
 
@@ -246,7 +245,7 @@ and (S,Z). In fact, each network had a character pair it
 could not identify. Since each network got trapped in a
 different local minimum, they made different errors, 
 but the ensemble approach allowed other networks to
-"outvote" the other's mistakes.
+"outvote" the mistakes made by one network.
 
 It is interesting that the character M was the only
 one that all networks correctly identified 100\% of the time.
@@ -265,10 +264,13 @@ and the limited computing resources we had for
 training.
 
 One difficulty we encountered was that the model
-had trouble as we added more and more gestures.
-We coped with this by adding more neurons, more layers,
-and moving to an ensemble approach to average
-outputs from individually inaccurate networks.
+had trouble differentiating certain pairs of gestures
+as we added more and more gestures;
+we stopped at 6 gestures because it was getting
+difficult already. We coped with this by adding
+more neurons, more layers, and moving to an ensemble
+approach to average outputs from individually
+inaccurate networks.
 
 \section*{Additional Materials}
 
