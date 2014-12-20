@@ -37,7 +37,7 @@
   Recurrent neural networks provide a natural way to model time
   sequences, and the LSTM architecture in particular provides a way
   to model long-range dependencies. We imlemented 6 gestures, and were able to
-  to correctly identify 88\% of gestures during test time with
+  to correctly identify 53 of 60 (~88\%) of gestures during test time with
   an ensemble approach.
 \end{abstract}
 
@@ -145,11 +145,13 @@ Cell Output (Hidden State)
 
 Normal Network Layer Output
 \[ \textbf{a}_{n}^{t} = W_{n}\textbf{o}^{t} \]
-\[ \textbf{n}^{t} = \sigma( \textbf{a}_{n}^{t}) \]
+\[ \textbf{n}^{t} = \tanh( \textbf{a}_{n}^{t}) \]
 
 \subsection{Backpropagation}
 \(\delta_{k}^{t,l+1}\) represents the error backpropogating from the above layer
-in the current time step. 
+in the current time step. The value of this at the top layer is the 
+derivative of the objective with respect to the network output, which
+is \(softmax(networkOutput)-trainingLabels\).
 As with before, \(*\) represents a pointwise multiplication. The \(\delta\) variables
 represent vectors for the whole layer.
 
@@ -254,7 +256,7 @@ characters similar to it in our experiments.
 
 \section{Conclusion}
 
-We were very surprised at how accurate the results
+In general, we were very surprised at how accurate the results
 we obtained were - 
 the networks were able to generalize very well
 to variations in speed and size of gestures. We
@@ -265,9 +267,10 @@ training.
 
 One difficulty we encountered was that the model
 had trouble differentiating certain pairs of gestures
-as we added more and more gestures;
+as we scaled up the number of gestures; 4 gestures (M, Z, O, L)
+were easily learned by a 2-layer network, but
 we stopped at 6 gestures because it was getting
-difficult already. We coped with this by adding
+very difficult. We coped with this by adding
 more neurons, more layers, and moving to an ensemble
 approach to average outputs from individually
 inaccurate networks.
