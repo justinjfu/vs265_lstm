@@ -115,21 +115,26 @@ class LSTMNetwork(object):
         error = 0
         for i in range(len(trainingIn)):
             #import pdb; pdb.set_trace()
+
             labels = trainingOut[i].reshape(outputs[i].shape)
-            predicted = Softmax.softmax(outputs[i])
-            #diff = predicted - labels
-            e = -labels*np.log(predicted)
-            error += np.sum(e)
-            #diff = np.linalg.norm(diff)
-            #error += 0.5*diff*diff
+
+            # Softmax
+            #predicted = Softmax.softmax(outputs[i])
+            #e = -labels*np.log(predicted)
+            #error += np.sum(e)
+
+            diff = outputs[i] - labels
+            diff = np.linalg.norm(diff)
+            error += 0.5*diff*diff
         return error, outputs
 
     def output_backprop_error(self, output, trainingOut):
         #return -(trainingOut.reshape(output.shape) - np.array(output))
-        #return output-trainingOut.reshape(output.shape)
-        labels = trainingOut.reshape(output.shape)
-        predicted = Softmax.softmax(output)
-        return (predicted-labels)
+        return output-trainingOut.reshape(output.shape)
+        #labels = trainingOut.reshape(output.shape)
+        #predicted = Softmax.softmax(output)
+
+        #return (predicted-labels)
         #labels = trainingOut.reshape(output.shape)
         #return -labels*(1-output) + (1-labels)*output
 
@@ -168,11 +173,90 @@ ForwardIntermediate = namedtuple("ForwardIntermediate",
 
 ForwardIntermediateForgetB = namedtuple("ForwardIntermediateForgetB", "forget_b")
 
+ForwardIntermediateNN = namedtuple("ForwardIntermediate", "input output")
 
 BackIntermediate = namedtuple("BackIntermediate",
     "del_k_pre hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_k del_h")
 
-class LSTMLayerWeights(object):
+
+class RNNLayer(object):
+    def forward_across_time(self, input):
+        raise NotImplementedError
+
+    def gradient(self, forward_intermediates, next_layer_del_k):
+        raise NotImplementedError
+
+    def update_layer_weights(self, dweights, K=1):
+        raise NotImplementedError
+
+    def from_weights_array(self, wts):
+        raise NotImplementedError
+
+    def to_weights_array(self):
+        raise NotImplementedError
+
+
+class NNLayer(RNNLayer):
+    def __init__(self, n_input, n_output, act):
+        self.n_input = n_input  # number of inputs into this layer
+        self.n_output = n_output
+
+        self.act = act
+        self.weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, n_input))
+
+    def forward_across_time(self, input):
+        T, D, _ = input.shape
+        intermediates = []
+        for t in range(T):
+            intermed = self.forward(input[t, :])
+            intermediates.append(intermed)
+        return intermediates
+
+    def forward(self, previous_layer_input):
+        return ForwardIntermediateNN(
+            input=previous_layer_input,
+            output=self.act(self.weights.dot(previous_layer_input))
+        )
+
+    def backward(self, forward_output, next_layer_del_k):
+        return next_layer_del_k*self.act.deriv(forward_output)
+
+    def gradient(self, forward_intermediates, next_layer_del_k):
+        """
+        Gradient for 1 input
+        :param forward_list:
+        :param next_layer_del_k:
+        :return:
+        """
+        T = len(forward_intermediates)
+        backward_intermediates = [None]*T
+
+        # Calculate gradient
+        final_output_g = np.zeros((self.n_output, self.n_input))
+
+        for t in range(T)[::-1]:
+            #import pdb; pdb.set_trace()
+            f_i = forward_intermediates[t]
+            b_i = self.backward(f_i.output, next_layer_del_k[t])
+            backward_intermediates[t] = b_i
+            final_output_g += np.outer(f_i.input, b_i).T
+
+        gradient = final_output_g
+
+        layer_del_k = [self.weights.T.dot(x) for x in backward_intermediates]
+
+        return gradient, layer_del_k
+
+    def update_layer_weights(self, dweights, K=1):
+        self.weights += dweights[0]*K
+
+    def from_weights_array(self, wts):
+        self.weights = wts[0]
+
+    def to_weights_array(self):
+        return [self.weights]
+
+class LSTMLayerWeights(RNNLayer):
     """
     Stores all of the weights for a single LSTM layer and computes derivatives given forward and backward
     context.
@@ -423,6 +507,7 @@ class LSTMLayerWeights(object):
         self.cellw_h += dweights[7]*K
 
         self.final_output_weights += dweights[8]*K
+
     def from_weights_array(self, wts):
         self.forgetw_x = wts[0]
         self.forgetw_h = wts[1]
@@ -478,7 +563,7 @@ if __name__ == '__main__':
 
     f, g, h = Logistic(), Logistic(), Tanh()
     lstm_layer1 = LSTMLayerWeights(2, 2, 2, f, g, h)
-    lstm_layer2 = LSTMLayerWeights(1, 2, 1, f, g, h)
+    lstm_layer2 = NNLayer(2, 1, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
     d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
@@ -486,14 +571,14 @@ if __name__ == '__main__':
     #d_weights = [d_weight1]
 
     lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
-    #lstm = LSTMNetwork([lstm_layer1])
+    #lstm = LSTMNetwork([lstm_layer1, nn_layer1])
 
 
-    for trial in range(1000):
-        import pdb; pdb.set_trace()
-        lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 5e-6)
+    for trial in range(200):
+        #import pdb; pdb.set_trace()
+        #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 5e-6)
         d_weights = lstm.gradient(trainingIn, trainingOut)
-        lstm.update_layer_weights(d_weights, K=-1)
+        lstm.update_layer_weights(d_weights, K=-0.5)
         if (trial+1) % 100 == 0:
             err, output = lstm.eval_objective(trainingIn, trainingOut)
             print "Trial =", trial+1
