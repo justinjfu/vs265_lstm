@@ -50,16 +50,13 @@ class LSTMWeights(Weights):
         raise NotImplemented
 
 
+ERR_SOFTMAX = 0
+ERR_SQUARED = 1
+
 class LSTMNetwork(object):
-    def __init__(self, layers):
-        """
-        :param layers: A list of integers denoting # cells in each layer.
-            Ex. [10, 30, 10]
-        :param act_f: Activation function on gates
-        :param act_g: Activation function on inputs
-        :param act_h: Activation function on outputs
-        """
+    def __init__(self, layers, error_func=ERR_SOFTMAX):
         self.layers = layers
+        self.error_func = error_func
     
     def mul_scalar(self, scalar):
         for layer in self.layers:
@@ -114,29 +111,25 @@ class LSTMNetwork(object):
         outputs = self.forward_across_time(trainingIn)
         error = 0
         for i in range(len(trainingIn)):
-            #import pdb; pdb.set_trace()
-
             labels = trainingOut[i].reshape(outputs[i].shape)
 
-            # Softmax
-            #predicted = Softmax.softmax(outputs[i])
-            #e = -labels*np.log(predicted)
-            #error += np.sum(e)
-
-            diff = outputs[i] - labels
-            diff = np.linalg.norm(diff)
-            error += 0.5*diff*diff
+            if self.error_func == ERR_SOFTMAX:
+                predicted = Softmax.softmax(outputs[i])
+                e = -labels*np.log(predicted)
+                error += np.sum(e)
+            elif self.error_func == ERR_SQUARED:
+                diff = outputs[i] - labels
+                diff = np.linalg.norm(diff)
+                error += 0.5*diff*diff
         return error, outputs
 
     def output_backprop_error(self, output, trainingOut):
-        #return -(trainingOut.reshape(output.shape) - np.array(output))
-        return output-trainingOut.reshape(output.shape)
-        #labels = trainingOut.reshape(output.shape)
-        #predicted = Softmax.softmax(output)
-
-        #return (predicted-labels)
-        #labels = trainingOut.reshape(output.shape)
-        #return -labels*(1-output) + (1-labels)*output
+        if self.error_func == ERR_SOFTMAX:
+            labels = trainingOut.reshape(output.shape)
+            predicted = Softmax.softmax(output)
+            return (predicted-labels)
+        elif self.error_func == ERR_SQUARED:
+            return output-trainingOut.reshape(output.shape)
 
     def to_weights_array(self):
         return [x.to_weights_array() for x in self.layers]
@@ -543,10 +536,10 @@ if __name__ == '__main__':
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
     d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
-    #d_weights = [d_weight1, d_weight2]
+    d_weights = [d_weight1, d_weight2]
     #d_weights = [d_weight1]
 
-    lstm = LSTMNetwork([lstm_layer1, lstm_layer2])
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2], error_func=ERR_SQUARED)
     #lstm = LSTMNetwork([lstm_layer1, nn_layer1])
 
 
