@@ -1,6 +1,7 @@
 import numpy as np
 from objective import Objective, Weights
-from activations import Logistic, Tanh, Softmax
+from activations import Logistic, Tanh
+from loss import Squared
 from collections import namedtuple
 from descend import gd
 
@@ -61,13 +62,10 @@ class LSTMWeights(Weights):
         raise NotImplemented
 
 
-ERR_SOFTMAX = 0
-ERR_SQUARED = 1
-
 class LSTMNetwork(object):
-    def __init__(self, layers, error_func=ERR_SOFTMAX):
+    def __init__(self, layers, loss):
         self.layers = layers
-        self.error_func = error_func
+        self.loss = loss
     
     def mul_scalar(self, scalar):
         for layer in self.layers:
@@ -123,24 +121,13 @@ class LSTMNetwork(object):
         error = 0
         for i in range(len(trainingIn)):
             labels = trainingOut[i].reshape(outputs[i].shape)
-
-            if self.error_func == ERR_SOFTMAX:
-                predicted = Softmax.softmax(outputs[i])
-                e = -labels*np.log(predicted)
-                error += np.sum(e)
-            elif self.error_func == ERR_SQUARED:
-                diff = outputs[i] - labels
-                diff = np.linalg.norm(diff)
-                error += 0.5*diff*diff
+            predicted = outputs[i]
+            error += self.loss.eval(predicted, labels)
         return error, outputs
 
     def output_backprop_error(self, output, trainingOut):
-        if self.error_func == ERR_SOFTMAX:
-            labels = trainingOut.reshape(output.shape)
-            predicted = Softmax.softmax(output)
-            return (predicted-labels)
-        elif self.error_func == ERR_SQUARED:
-            return output-trainingOut.reshape(output.shape)
+        labels = trainingOut.reshape(output.shape)
+        return self.loss.backward(output, labels)
 
     def to_weights_array(self):
         return [x.to_weights_array() for x in self.layers]
@@ -563,7 +550,7 @@ if __name__ == '__main__':
     d_weights = [d_weight1, d_weight2]
     #d_weights = [d_weight1]
 
-    lstm = LSTMNetwork([lstm_layer1, lstm_layer2], error_func=ERR_SQUARED)
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2], loss=Squared())
     #lstm = LSTMNetwork([lstm_layer1, nn_layer1])
 
 
