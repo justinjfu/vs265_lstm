@@ -1,11 +1,11 @@
 import numpy as np
 from objective import Objective, Weights
-from activations import Logistic, Tanh
+from activations import Logistic, Tanh, Softplus
 from loss import Squared
 from collections import namedtuple
 from descend import gd
 
-WEIGHT_INIT_RANGE = 0.5
+WEIGHT_INIT_RANGE = 0.1
 
 
 class LSTMObjective(Objective):
@@ -47,7 +47,7 @@ class LSTMWeights(Weights):
                 total += np.sum(self_mat*other_mat)
         return total
 
-    def save_to_file(self, filename):
+    def save_to_file(self, filename_prefix, _):
         with open(filename, 'wb') as netfile:
             pickle.dump(self.network, netfile)
 
@@ -188,14 +188,14 @@ class RNNLayer(object):
 
 
 class NNLayer(RNNLayer):
-    def __init__(self, n_input, n_output, act, bias=True):
+    def __init__(self, n_input, n_output, act, usebias=True):
         self.n_input = n_input  # number of inputs into this layer
         self.n_output = n_output
-        self.bias = bias
+        self.usebias = usebias
 
         self.act = act
         self.weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, n_input))
-        if self.bias:
+        if self.usebias:
             self.bias = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, 1))
         else:
             self.bias = np.random.uniform(0, 0, (n_output, 1))
@@ -235,7 +235,7 @@ class NNLayer(RNNLayer):
             f_i = forward_intermediates[t]
             d_output_pre = next_layer_del_k[t] * self.act.deriv(f_i.output_pre)
             backward_intermediates[t] = d_output_pre
-            if self.bias:
+            if self.usebias:
                 bias_g += d_output_pre
             final_output_g += np.outer(f_i.input, d_output_pre).T
 
@@ -540,17 +540,17 @@ if __name__ == '__main__':
     #trainingOut = [trainingOut0]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(2, 2, f, g, h)
-    lstm_layer2 = NNLayer(2, 1, h, bias=False)
+    lstm_layer1 = LSTMLayerWeights(2, 4, f, g, h)
+    lstm_layer2 = NNLayer(4, 4, Tanh(), usebias=False)
+    lstm_layer3 = NNLayer(4, 1, Tanh(), usebias=False)
     #lstm_layer1 = LSTMLayerWeights(2, 4, f, g, h)
     #lstm_layer2 = NNLayer(4, 1, h)
-    d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
-    d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
-
-    d_weights = [d_weight1, d_weight2]
+    #d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
+    #d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
+    #d_weights = [d_weight1, d_weight2]
     #d_weights = [d_weight1]
 
-    lstm = LSTMNetwork([lstm_layer1, lstm_layer2], loss=Squared())
+    lstm = LSTMNetwork([lstm_layer1, lstm_layer2, lstm_layer3], loss=Squared())
     #lstm = LSTMNetwork([lstm_layer1, nn_layer1])
 
 
@@ -570,8 +570,8 @@ if __name__ == '__main__':
 
 
     wt = LSTMWeights(lstm.to_weights_array())
-    obj = LSTMObjective(trainingIn, trainingOut, lstm, l2reg=0.001)
-    wt = gd(obj, wt, iters=500, heartbeat=100, learning_rate=0.5, momentum_rate=0.1)
+    obj = LSTMObjective(trainingIn, trainingOut, lstm, l2reg=0.000)
+    wt = gd(obj, wt, iters=2000, heartbeat=200, learning_rate=0.05, momentum_rate=0.5)
 
 
     print "FINAL WEIGHTS"

@@ -1,5 +1,8 @@
 import numpy as np
+import scipy.special
 
+logistic = scipy.special.expit  # expit is faster
+# logistic = lambda x: 1.0/(1.0+np.exp(-x))
 
 class Activation(object):
     def __init__(self):
@@ -39,7 +42,7 @@ class Logistic(Activation):
         super(Logistic, self).__init__()
 
     def val(self, x):
-        return 1.0/(1.0+np.exp(-x))
+        return logistic(x)
 
     def deriv(self, x):
         y = self.val(x)
@@ -66,3 +69,18 @@ class Tanh(Activation):
         y = self.val(x)
         dy = 1.0-(y*y)
         return -2*dy*y
+
+
+class Softplus(Activation):
+    def __init__(self):
+        super(Softplus, self).__init__()
+
+    def val(self, x):
+        return np.log(1.0+np.exp(x))
+
+    def deriv(self, x):
+        return logistic(x)
+
+    def deriv2nd(self, x):
+        y = self.deriv(x)
+        return y*(1-y)

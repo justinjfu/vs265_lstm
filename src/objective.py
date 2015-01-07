@@ -52,9 +52,11 @@ class Weights(object):
         """
         raise NotImplemented
 
-    def save_to_file(self, filename):
+    def save_to_file(self, filename_prefix, iteration):
         """
         Save weights to a file
+        :param filename_prefix:
+        :param iteration: Descend iteration #
         """
         raise NotImplemented
 

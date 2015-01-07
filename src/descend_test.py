@@ -32,8 +32,8 @@ class SimpleWeight(Weights):
     def mul_scalar(self, other_scalar):
         return SimpleWeight(self.val*other_scalar)
 
-    def save_to_file(self, filename):
-        print 'Saving weight ', self.val, ' to file: ', filename
+    def save_to_file(self, filename, i):
+        print 'Saving weight ', self.val, ' to file: ', filename, ' on iter ', i
 
     def __str__(self):
         return str(self.val)

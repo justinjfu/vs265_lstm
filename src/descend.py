@@ -12,7 +12,7 @@ def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
         weights (if save_to_file is specified)
     :param learning_rate: Scaling factor on gradient
     :param momentum_rate: Scaling factor on momentum
-    :param save_to_file: Filename to save intermediate weights to. If left None, does
+    :param save_to_file: Filename prefix to save intermediate weights to. If left None, does
         not save
     """
     start_time = time.time()
@@ -34,7 +34,7 @@ def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
                 (current_time, current_time-last_time, i, objective.value_at(weights))
             last_time = current_time
             if save_to_file:
-                weights.save_to_file(save_to_file)
+                weights.save_to_file(save_to_file, i)
             if callback:
                 callback(i)
 
