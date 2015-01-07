@@ -190,12 +190,17 @@ class RNNLayer(object):
 
 
 class NNLayer(RNNLayer):
-    def __init__(self, n_input, n_output, act):
+    def __init__(self, n_input, n_output, act, bias=True):
         self.n_input = n_input  # number of inputs into this layer
         self.n_output = n_output
+        self.bias = bias
 
         self.act = act
         self.weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, n_input))
+        if self.bias:
+            self.bias = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, 1))
+        else:
+            self.bias = np.random.uniform(0, 0, (n_output, 1))
 
     def forward_across_time(self, input):
         T, D, _ = input.shape
@@ -206,7 +211,8 @@ class NNLayer(RNNLayer):
         return intermediates
 
     def forward(self, previous_layer_input):
-        output_pre = self.weights.dot(previous_layer_input)
+        output_pre = self.weights.dot(previous_layer_input)+self.bias
+
         return ForwardIntermediateNN(
             input=previous_layer_input,
             output_pre=output_pre,
@@ -224,15 +230,18 @@ class NNLayer(RNNLayer):
         backward_intermediates = [None]*T
 
         # Calculate gradient
+        bias_g = np.zeros((self.n_output, 1))
         final_output_g = np.zeros((self.n_output, self.n_input))
 
         for t in range(T)[::-1]:
             f_i = forward_intermediates[t]
-            b_i = next_layer_del_k[t] * self.act.deriv(f_i.output_pre)
-            backward_intermediates[t] = b_i
-            final_output_g += np.outer(f_i.input, b_i).T
+            d_output_pre = next_layer_del_k[t] * self.act.deriv(f_i.output_pre)
+            backward_intermediates[t] = d_output_pre
+            if self.bias:
+                bias_g += d_output_pre
+            final_output_g += np.outer(f_i.input, d_output_pre).T
 
-        gradient = final_output_g
+        gradient = [final_output_g, bias_g]
 
         layer_del_k = [self.weights.T.dot(x) for x in backward_intermediates]
 
@@ -240,12 +249,14 @@ class NNLayer(RNNLayer):
 
     def update_layer_weights(self, dweights, K=1):
         self.weights += dweights[0]*K
+        self.bias += dweights[1]*K
 
     def from_weights_array(self, wts):
         self.weights = wts[0]
+        self.bias = wts[1]
 
     def to_weights_array(self):
-        return [self.weights]
+        return [self.weights, self.bias]
 
 class LSTMLayerWeights(RNNLayer):
     """
@@ -531,8 +542,10 @@ if __name__ == '__main__':
     #trainingOut = [trainingOut0]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(2, 4, f, g, h)
-    lstm_layer2 = NNLayer(4, 1, h)
+    lstm_layer1 = LSTMLayerWeights(2, 2, f, g, h)
+    lstm_layer2 = NNLayer(2, 1, h, bias=False)
+    #lstm_layer1 = LSTMLayerWeights(2, 4, f, g, h)
+    #lstm_layer2 = NNLayer(4, 1, h)
     d_weight1 = [np.zeros(w.shape) for w in lstm_layer1.to_weights_array()]
     d_weight2 = [np.zeros(w.shape) for w in lstm_layer2.to_weights_array()]
 
@@ -562,10 +575,11 @@ if __name__ == '__main__':
     """
 
     print "FINAL WEIGHTS"
-    final_weights = lstm.layers[0].to_weights_array()
-    for final_wt in final_weights:
-        print final_wt
-        print ""
+    for layer_id in range(len(lstm.layers)):
+        final_weights = lstm.layers[layer_id].to_weights_array()
+        for final_wt in final_weights:
+            print final_wt
+            print ""
     print "TESTING INPUT NAO"
     N=1
     testIn1 = np.array([[1, 0, 1] * N, [0,0,0]*N]).T.reshape(3,2,1)
