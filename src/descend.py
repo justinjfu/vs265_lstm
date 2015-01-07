@@ -34,7 +34,7 @@ def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
 
         if i % heartbeat == 0:
             current_time = time.time()
-            print '[descend.gd] %f(%f) Completed %d iterations. Current objective: %f' % \
+            print '[descend.gd:%f](%f) Completed %d iterations. Current objective: %f' % \
                 (current_time, current_time-last_time, i, objective.value_at(weights))
             last_time = current_time
             if save_to_file:

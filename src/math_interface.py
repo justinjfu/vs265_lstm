@@ -16,12 +16,14 @@ if COMP_MODE == NUMPY_MODE:
     dot = np.dot
     outer = np.outer
 
-    # Array Initialization
+    # Misc
     array = np.array
     zeros = np.zeros
     ones = np.ones
     random = lambda: 0  # HACK: make a namespace for random
     random.uniform = np.random.uniform
+    random.seed = np.random.seed
+    ndenumerate = np.ndenumerate
 
     # Math functions
     exp = np.exp
@@ -29,6 +31,7 @@ if COMP_MODE == NUMPY_MODE:
     tanh = np.tanh
     log = np.log
     sum = np.sum
+    cumsum = np.cumsum
 
     linalg = lambda: 0  # HACK: make a namespace for random
     linalg.norm = np.linalg.norm

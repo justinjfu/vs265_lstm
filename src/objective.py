@@ -1,3 +1,8 @@
+"""
+Optimization objective and weight object
+"""
+
+
 class Objective(object):
     """
     Abstract class for training an objective
@@ -18,6 +23,7 @@ class Objective(object):
         Evaluate the objective at a the point wts
         """
         raise NotImplemented
+
 
 class Weights(object):
     def __init__(self):
@@ -41,7 +47,8 @@ class Weights(object):
 
     def dot_weight(self, other):
         """
-        Dot product with another weight
+        Dot product with another weight.
+        (Used for regularization)
         """
         raise NotImplemented
 

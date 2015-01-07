@@ -1,7 +1,10 @@
+"""
+LSTM Objective, weights, and network
+"""
 import pickle
-import numpy as np
+import math_interface as np
 from objective import Objective, Weights
-from activations import Logistic, Tanh, Softplus
+from activations import Logistic, Tanh
 from loss import Squared
 from layers import NNLayer, LSTMLayerWeights
 from descend import gd
