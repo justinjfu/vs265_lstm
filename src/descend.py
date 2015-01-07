@@ -1,4 +1,8 @@
+"""
+Implementations of optimization algorithms
+"""
 import time
+
 
 def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
        learning_rate=1e-2, momentum_rate=0.0, callback=None):

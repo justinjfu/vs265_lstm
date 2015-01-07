@@ -1,7 +1,7 @@
 """
 Network loss functions
 """
-import numpy as np
+import math_interface as np
 
 __author__ = 'justin'
 

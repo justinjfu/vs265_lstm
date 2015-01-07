@@ -1,8 +1,8 @@
-import numpy as np
-import scipy.special
+"""
+Network non-linearities and activations functions
+"""
+import math_interface as np
 
-logistic = scipy.special.expit  # expit is faster
-# logistic = lambda x: 1.0/(1.0+np.exp(-x))
 
 class Activation(object):
     def __init__(self):
@@ -42,7 +42,7 @@ class Logistic(Activation):
         super(Logistic, self).__init__()
 
     def val(self, x):
-        return logistic(x)
+        return np.logistic(x)
 
     def deriv(self, x):
         y = self.val(x)
@@ -79,7 +79,7 @@ class Softplus(Activation):
         return np.log(1.0+np.exp(x))
 
     def deriv(self, x):
-        return logistic(x)
+        return np.logistic(x)
 
     def deriv2nd(self, x):
         y = self.deriv(x)
