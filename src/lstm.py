@@ -8,20 +8,22 @@ WEIGHT_INIT_RANGE = 0.5
 
 
 class LSTMObjective(Objective):
-    def __init__(self, trainingIn, trainingOut, network):
+    def __init__(self, trainingIn, trainingOut, network, l2reg=0.0):
         super(LSTMObjective, self).__init__()
         self.training_in = trainingIn
         self.training_out = trainingOut
         self.network = network
+        self.l2reg = l2reg
 
     def gradient_at(self, wts):
         self.network.from_weights_array(wts.wts)
-        return LSTMWeights(self.network.gradient(self.training_in, self.training_out))
+        gradient = self.network.gradient(self.training_in, self.training_out)
+        return LSTMWeights(gradient)+wts*self.l2reg
 
     def value_at(self, wts):
         self.network.from_weights_array(wts.wts)
         err, _ = self.network.eval_objective(self.training_in, self.training_out)
-        return err
+        return err + wts*wts*self.l2reg
 
 
 class LSTMWeights(Weights):
@@ -34,6 +36,15 @@ class LSTMWeights(Weights):
         
     def mul_scalar(self, other_scalar):
         return LSTMWeights([ [mat * other_scalar for mat in layer] for layer in self.wts])
+
+    def dot_weight(self, other):
+        total = 0
+        for L in range(len(self.wts)):
+            for mat in range(len(self.wts[L])):
+                other_mat = other.wts[L][mat]
+                self_mat = self.wts[L][mat]
+                total += np.sum(self_mat*other_mat)
+        return total
 
     def save_to_file(self, filename):
         with open(filename, 'wb') as netfile:
@@ -556,6 +567,7 @@ if __name__ == '__main__':
     #lstm = LSTMNetwork([lstm_layer1, nn_layer1])
 
 
+    """
     for trial in range(200):
         #import pdb; pdb.set_trace()
         #lstm.numerical_gradient(d_weights, trainingIn, trainingOut, perturb_amount = 5e-6)
@@ -566,13 +578,14 @@ if __name__ == '__main__':
             print "Trial =", trial+1
             print err
             print output
-
-
     """
+
+
+
     wt = LSTMWeights(lstm.to_weights_array())
-    obj = LSTMObjective(trainingIn, trainingOut, lstm)
-    wt = gd(obj, wt, iters=1000, heartbeat=100, learning_rate = 0.5, momentum_rate = 0.5)
-    """
+    obj = LSTMObjective(trainingIn, trainingOut, lstm, l2reg=0.001)
+    wt = gd(obj, wt, iters=500, heartbeat=100, learning_rate=0.5, momentum_rate=0.1)
+
 
     print "FINAL WEIGHTS"
     for layer_id in range(len(lstm.layers)):

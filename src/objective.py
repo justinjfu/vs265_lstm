@@ -29,11 +29,19 @@ class Weights(object):
 
     def __mul__(self, other):
         # For operator overloading
+        if isinstance(other, Weights):
+            return self.dot_weight(other)
         return self.mul_scalar(other)
 
     def add_weight(self, other_weight):
         """
         Add this weight object to another weight object
+        """
+        raise NotImplemented
+
+    def dot_weight(self, other):
+        """
+        Dot product with another weight
         """
         raise NotImplemented
 
