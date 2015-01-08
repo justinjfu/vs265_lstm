@@ -73,4 +73,3 @@ class Weights(object):
         Read weights from a file
         """
         raise NotImplemented
-

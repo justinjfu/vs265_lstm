@@ -6,7 +6,7 @@ import math_interface as np
 from objective import Objective, Weights
 from activations import Logistic, Tanh
 from loss import Squared
-from layers import NNLayer, LSTMLayerWeights
+from layers import NNLayer, LSTMLayerWeights, LSTMWeights
 from descend import gd
 
 
@@ -19,34 +19,33 @@ class LSTMObjective(Objective):
         self.l2reg = l2reg
 
     def gradient_at(self, wts):
-        self.network.from_weights_array(wts.wts)
+        self.network.set_weights(wts.wts)
         gradient = self.network.gradient(self.training_in, self.training_out)
-        return LSTMWeights(gradient)+wts*self.l2reg
+        return LSTMObjectiveWeights(gradient)+wts*self.l2reg
 
     def value_at(self, wts):
-        self.network.from_weights_array(wts.wts)
+        self.network.set_weights(wts.wts)
         err, _ = self.network.eval_objective(self.training_in, self.training_out)
         return err + wts*wts*self.l2reg
 
 
-class LSTMWeights(Weights):
+class LSTMObjectiveWeights(Weights):
     def __init__(self, wts):
-        super(LSTMWeights, self).__init__()
+        super(LSTMObjectiveWeights, self).__init__()
         self.wts = wts
 
     def add_weight(self, other_weight):
-        return LSTMWeights([ [self.wts[L][mat] + other_weight.wts[L][mat] for mat in range(len(self.wts[L]))] for L in range(len(self.wts))])
+        return LSTMObjectiveWeights([(self.wts[L] + other_weight.wts[L]) for L in range(len(self.wts))])
         
     def mul_scalar(self, other_scalar):
-        return LSTMWeights([ [mat * other_scalar for mat in layer] for layer in self.wts])
+        return LSTMObjectiveWeights([layer * other_scalar for layer in self.wts])
 
     def dot_weight(self, other):
         total = 0
         for L in range(len(self.wts)):
-            for mat in range(len(self.wts[L])):
-                other_mat = other.wts[L][mat]
-                self_mat = self.wts[L][mat]
-                total += np.sum(self_mat*other_mat)
+            other_mat = other.wts[L]
+            self_mat = self.wts[L]
+            total += self_mat.dot_weight(other_mat)
         return total
 
     def save_to_file(self, filename_prefix, _):
@@ -55,7 +54,7 @@ class LSTMWeights(Weights):
 
     @classmethod
     def read_from_file(cls, filename):
-        net = LSTMWeights(None)
+        net = LSTMObjectiveWeights(None)
         with open(filename, 'rb') as netfile:
             net.network = pickle.load(netfile)
         return net
@@ -75,7 +74,7 @@ class LSTMNetwork(object):
 
     def add_weight(self, other_network):
         for i in range(len(self.layers)):
-            self.layers[i].update_layer_weights( other_network.layers[i].to_weights_array())
+            self.layers[i].update_layer_weights( other_network.layers[i].to_compact_weights())
 
     def forward_across_time(self, inputs):
         """
@@ -97,7 +96,7 @@ class LSTMNetwork(object):
         layer_intermediates = [None]*Nlayers
         gradients = []
         for layer in self.layers:
-            weights_in_layer = [np.zeros(weight.shape) for weight in layer.to_weights_array()]
+            weights_in_layer = layer.make_zero_weights() #[np.zeros(weight.shape) for weight in layer.to_compact_weights()]
             gradients.append(weights_in_layer)
         for i in range(len(inputs)):  # loop over training examples
             current_in = inputs[i]
@@ -110,8 +109,9 @@ class LSTMNetwork(object):
             next_layer_del_k = self.output_backprop_error(final_layer_output, outputs[i])
             for j in range(len(self.layers))[::-1]:
                 gradient, next_layer_del_k = self.layers[j].gradient(layer_intermediates[j], next_layer_del_k)
-                for k in range(len(gradients[j])):
-                    gradients[j][k] += gradient[k]
+                gradients[j] += gradient
+                #for k in range(len(gradients[j])):
+                #    gradients[j][k] += gradient[k]
         return gradients
 
     def update_layer_weights(self, d_weights, K=1):
@@ -131,18 +131,18 @@ class LSTMNetwork(object):
         labels = trainingOut.reshape(output.shape)
         return self.loss.backward(output, labels)
 
-    def to_weights_array(self):
-        return [x.to_weights_array() for x in self.layers]
+    def to_compact_weights(self):
+        return [x.to_compact_weights() for x in self.layers]
 
-    def from_weights_array(self, dwts):
+    def set_weights(self, dwts):
         for i in range(len(self.layers)):
-            self.layers[i].from_weights_array(dwts[i])
+            self.layers[i].set_weights(dwts[i])
 
     def numerical_gradient(self, d_weights, trainingIn, trainingOut, perturb_amount = 1e-5):
         #original_objective, _ = self.eval_objective(trainingIn, trainingOut)
         for i in range(len(self.layers)):
             lstm = self.layers[i]
-            weights = lstm.to_weights_array()
+            weights = lstm.to_compact_weights()
             dweights = d_weights[i]
             for wi in range(len(weights)):  # need to iterate through each weight independently
                 weight = weights[wi]
@@ -215,14 +215,14 @@ if __name__ == '__main__':
 
 
 
-    wt = LSTMWeights(lstm.to_weights_array())
+    wt = LSTMObjectiveWeights(lstm.to_compact_weights())
     obj = LSTMObjective(trainingIn, trainingOut, lstm, l2reg=0.000)
     wt = gd(obj, wt, iters=2000, heartbeat=200, learning_rate=0.05, momentum_rate=0.5)
 
 
     print "FINAL WEIGHTS"
     for layer_id in range(len(lstm.layers)):
-        final_weights = lstm.layers[layer_id].to_weights_array()
+        final_weights = lstm.layers[layer_id].to_compact_weights()
         for final_wt in final_weights:
             print final_wt
             print ""

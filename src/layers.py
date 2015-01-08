@@ -1,4 +1,5 @@
 from collections import namedtuple
+from objective import Weights
 import math_interface as np
 __author__ = 'justin'
 
@@ -13,13 +14,58 @@ class LayerBase(object):
         raise NotImplementedError
 
     def update_layer_weights(self, dweights, K=1):
+        self.set_weights(self.weights+(dweights * K))
+
+    def set_weights(self, wts):
         raise NotImplementedError
 
-    def from_weights_array(self, wts):
+    def to_compact_weights(self):
         raise NotImplementedError
 
-    def to_weights_array(self):
+    def make_zero_weights(self):
         raise NotImplementedError
+
+
+def BuildCompactNetWeights(arg_names):
+    """
+    Builds compact network weights, which is a list of matrices
+    :param arg_names:
+    :return:
+    """
+    arg_names = arg_names.split(' ')
+    numargs = len(arg_names)
+    class CompactNetWeights(Weights):
+        def __init__(self, *args):
+            if len(args) != numargs:
+                print args
+                print numargs
+                print len(args)
+                raise blah
+            self.weights = args
+            for i in range(len(arg_names)):
+                setattr(self, arg_names[i], args[i])
+
+        def __iter__(self):
+            for wt in self.weights:
+                yield wt
+
+        def __add__(self, other_weight):
+            #import pdb; pdb.set_trace()
+            return CompactNetWeights(*
+                [(self.weights[mat] + other_weight.weights[mat]) for mat in range(len(self.weights)) ]
+            )
+
+        def mul_scalar(self, other_scalar):
+            return CompactNetWeights(*[[mat * other_scalar for mat in layer] for layer in self.weights])
+
+        def dot_weight(self, other):
+            total = 0
+            for mat in range(len(self.weights)):
+                other_mat = other.weights[mat]
+                self_mat = self.weights[mat]
+                total += np.sum(self_mat*other_mat)
+            return total
+    return CompactNetWeights
 
 
 ForwardIntermediate = namedtuple("ForwardIntermediate",
@@ -27,12 +73,13 @@ ForwardIntermediate = namedtuple("ForwardIntermediate",
 
 ForwardIntermediateForgetB = namedtuple("ForwardIntermediateForgetB", "forget_b")
 
-ForwardIntermediateNN = namedtuple("ForwardIntermediate", "input output_pre output")
+ForwardIntermediateNN = namedtuple("ForwardIntermediateNN", "input output_pre output")
 
 BackIntermediate = namedtuple("BackIntermediate",
     "hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_k del_h")
 
 
+NNWeights = BuildCompactNetWeights("ip bias")
 class NNLayer(LayerBase):
     def __init__(self, n_input, n_output, act, usebias=True):
         self.n_input = n_input  # number of inputs into this layer
@@ -40,11 +87,13 @@ class NNLayer(LayerBase):
         self.usebias = usebias
 
         self.act = act
-        self.weights = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, n_input))
+        ip = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, n_input))
         if self.usebias:
-            self.bias = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, 1))
+            bias = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n_output, 1))
         else:
-            self.bias = np.random.uniform(0, 0, (n_output, 1))
+            bias = np.random.uniform(0, 0, (n_output, 1))
+
+        self.weights = NNWeights(ip, bias)
 
     def forward_across_time(self, input):
         T, D, _ = input.shape
@@ -55,7 +104,7 @@ class NNLayer(LayerBase):
         return intermediates
 
     def forward(self, previous_layer_input):
-        output_pre = self.weights.dot(previous_layer_input)+self.bias
+        output_pre = self.weights.ip.dot(previous_layer_input)+self.weights.bias
 
         return ForwardIntermediateNN(
             input=previous_layer_input,
@@ -85,24 +134,23 @@ class NNLayer(LayerBase):
                 bias_g += d_output_pre
             final_output_g += np.outer(f_i.input, d_output_pre).T
 
-        gradient = [final_output_g, bias_g]
+        gradient = NNWeights(final_output_g, bias_g)
 
-        layer_del_k = [self.weights.T.dot(x) for x in backward_intermediates]
+        layer_del_k = [self.weights.ip.T.dot(x) for x in backward_intermediates]
 
         return gradient, layer_del_k
 
-    def update_layer_weights(self, dweights, K=1):
-        self.weights += dweights[0]*K
-        self.bias += dweights[1]*K
+    def set_weights(self, wts):
+        self.weights = wts
 
-    def from_weights_array(self, wts):
-        self.weights = wts[0]
-        self.bias = wts[1]
+    def to_compact_weights(self):
+        return self.weights
 
-    def to_weights_array(self):
-        return [self.weights, self.bias]
+    def make_zero_weights(self):
+        weights_in_layer = [np.zeros(weight.shape) for weight in self.to_compact_weights()]
+        return NNWeights(*weights_in_layer)
 
-
+LSTMWeights = BuildCompactNetWeights("forgetw_x forgetw_h inw_x inw_h outw_x outw_h cellw_x cellw_h")
 class LSTMLayerWeights(LayerBase):
     """
     Stores all of the weights for a single LSTM layer and computes derivatives given forward and backward
@@ -117,24 +165,30 @@ class LSTMLayerWeights(LayerBase):
         self.act_g = act_g  # activation function on inputs
         self.act_h = act_h  # activation function on ouputs
 
-        self.forgetw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # forget weights from X
-        self.forgetw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
+        forgetw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # forget weights from X
+        forgetw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                            (n, n))  # forget weights from previous hidden
 
-        self.inw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # input weights from X
-        self.inw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
+        inw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # input weights from X
+        inw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                        (n, n))  # input weights from previous hidden
 
-        self.outw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # output weights from X
-        self.outw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
+        outw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE, (n, n_input))  # output weights from X
+        outw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                         (n, n))  # output weights from previous hidden
 
-        self.cellw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
+        cellw_x = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                          (n, n_input))  # cell state weights from X
-        self.cellw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
+        cellw_h = np.random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE,
                                          (n, n))  # cell state weights from previous hidden
 
         self.init_back_intermed = self.init_dels()
+
+        self.weights = LSTMWeights(
+                forgetw_x, forgetw_h,
+                inw_x,inw_h,
+                outw_x,outw_h,
+                cellw_x,cellw_h)
 
 
     def init_dels(self):
@@ -186,19 +240,19 @@ class LSTMLayerWeights(LayerBase):
         :return: [new cell states, new hidden states, output]. All are N-dimensional vectors
         """
         # Compute input gate
-        input_a = self.inw_x.dot(previous_layer_input) + self.inw_h.dot(previous_hidden)
+        input_a = self.weights.inw_x.dot(previous_layer_input) + self.weights.inw_h.dot(previous_hidden)
         input_b = self.act_f(input_a)  # Input gate outputs
 
         # Compute forget gate
-        forget_a = self.forgetw_x.dot(previous_layer_input) + self.forgetw_h.dot(previous_hidden)
+        forget_a = self.weights.forgetw_x.dot(previous_layer_input) + self.weights.forgetw_h.dot(previous_hidden)
         forget_b = self.act_f(forget_a)  # Forget gate outputs
 
         # Compute new cell states
-        a_t_c = self.cellw_x.dot(previous_layer_input) + self.cellw_h.dot(previous_hidden)
+        a_t_c = self.weights.cellw_x.dot(previous_layer_input) + self.weights.cellw_h.dot(previous_hidden)
         new_cell_states = input_b * self.act_g(a_t_c) + forget_b * previous_cell
 
         # Compute output gates
-        output_a = self.outw_x.dot(previous_layer_input) + self.outw_h.dot(previous_hidden)
+        output_a = self.weights.outw_x.dot(previous_layer_input) + self.weights.outw_h.dot(previous_hidden)
         output_b = self.act_f(output_a)  # Input gate outputs
 
         # Compute new hidden layer outputs
@@ -216,10 +270,10 @@ class LSTMLayerWeights(LayerBase):
         :return:
         """
         # Hidden State
-        del_h = self.inw_h.T.dot(next_backward.input_delta) + \
-                self.forgetw_h.T.dot(next_backward.forget_delta) +\
-                self.outw_h.T.dot(next_backward.output_gate_delta) +\
-                self.cellw_h.T.dot(next_backward.cell_delta)
+        del_h = self.weights.inw_h.T.dot(next_backward.input_delta) + \
+                self.weights.forgetw_h.T.dot(next_backward.forget_delta) +\
+                self.weights.outw_h.T.dot(next_backward.output_gate_delta) +\
+                self.weights.cellw_h.T.dot(next_backward.cell_delta)
 
         hidden_deriv = next_layer_del_k + del_h
 
@@ -238,10 +292,10 @@ class LSTMLayerWeights(LayerBase):
         # Input gate
         input_delta = self.act_f.deriv(forward.input_a) * self.act_g(forward.a_t_c) * cell_deriv
 
-        del_k = self.inw_x.T.dot(input_delta) + \
-                self.forgetw_x.T.dot(forget_delta) + \
-                self.outw_x.T.dot(output_gate_delta) + \
-                self.cellw_x.T.dot(cell_delta)
+        del_k = self.weights.inw_x.T.dot(input_delta) + \
+                self.weights.forgetw_x.T.dot(forget_delta) + \
+                self.weights.outw_x.T.dot(output_gate_delta) + \
+                self.weights.cellw_x.T.dot(cell_delta)
                 #cell_delta * np.sum(self.cellw_x, axis=0, keepdims=True)
 
         return BackIntermediate(hidden_deriv, output_gate_delta, cell_deriv, cell_delta, forget_delta, input_delta,
@@ -306,57 +360,22 @@ class LSTMLayerWeights(LayerBase):
             outw_h_g += np.outer(b_i.output_gate_delta, f_i_past_hidden)
             cellw_h_g += np.outer(b_i.cell_delta, f_i_past_hidden)
 
-        gradient = [forgetw_x_g,
-                    forgetw_h_g,
-
-                    inw_x_g,
-                    inw_h_g,
-
-                    outw_x_g,
-                    outw_h_g,
-
-                    cellw_x_g,
-                    cellw_h_g]
+        gradient = LSTMWeights(
+                    forgetw_x_g,forgetw_h_g,
+                    inw_x_g,inw_h_g,
+                    outw_x_g,outw_h_g,
+                    cellw_x_g,cellw_h_g)
 
         layer_del_k = [x.del_k for x in backward_intermediates]
 
         return gradient, layer_del_k
 
-    def update_layer_weights(self, dweights, K=1):
-        self.forgetw_x += dweights[0]*K
-        self.forgetw_h += dweights[1]*K
+    def set_weights(self, wts):
+        self.weights = wts
 
-        self.inw_x += dweights[2]*K
-        self.inw_h += dweights[3]*K
+    def to_compact_weights(self):
+        return self.weights
 
-        self.outw_x += dweights[4]*K
-        self.outw_h += dweights[5]*K
-
-        self.cellw_x += dweights[6]*K
-        self.cellw_h += dweights[7]*K
-
-    def from_weights_array(self, wts):
-        self.forgetw_x = wts[0]
-        self.forgetw_h = wts[1]
-
-        self.inw_x = wts[2]
-        self.inw_h = wts[3]
-
-        self.outw_x = wts[4]
-        self.outw_h = wts[5]
-
-        self.cellw_x = wts[6]
-        self.cellw_h = wts[7]
-
-    def to_weights_array(self):
-        return [self.forgetw_x,
-                self.forgetw_h,
-
-                self.inw_x,
-                self.inw_h,
-
-                self.outw_x,
-                self.outw_h,
-
-                self.cellw_x,
-                self.cellw_h]
+    def make_zero_weights(self):
+        weights_in_layer = [np.zeros(weight.shape) for weight in self.to_compact_weights()]
+        return LSTMWeights(*weights_in_layer)
