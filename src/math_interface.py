@@ -8,6 +8,8 @@ NUMPY_MODE = 1
 
 COMP_MODE = NUMPY_MODE  # Computation mode
 
+new_namespace = lambda: lambda: 0  # HACK: make a function (which can store attributes)
+
 if COMP_MODE == NUMPY_MODE:
     import numpy as np
     import scipy.special
@@ -20,7 +22,7 @@ if COMP_MODE == NUMPY_MODE:
     array = np.array
     zeros = np.zeros
     ones = np.ones
-    random = lambda: 0  # HACK: make a namespace for random
+    random = new_namespace()
     random.uniform = np.random.uniform
     random.seed = np.random.seed
     ndenumerate = np.ndenumerate
@@ -33,20 +35,34 @@ if COMP_MODE == NUMPY_MODE:
     sum = np.sum
     cumsum = np.cumsum
 
-    linalg = lambda: 0  # HACK: make a namespace for random
+    linalg = new_namespace()
     linalg.norm = np.linalg.norm
 
 elif COMP_MODE == GNUMPY_MODE:
-    import gnumpy as gnp
+    import math_utils.gnumpy as gnp
+    import numpy as np
 
     # Inner/outer products
     dot = gnp.dot
     outer = gnp.outer
 
     # Array Initialization
-
+    array = gnp.as_garray
+    zeros = gnp.zeros
+    ones = gnp.ones
+    random = new_namespace()
+    random.uniform = lambda min,max,shape: (gnp.rand(shape)-min)*(max-min)
+    random.seed = gnp.seed_rand
+    ndenumerate = lambda arr: np.ndenumerate(gnp.as_numpy_array(arr))  # HACK!
 
     # Math functions
+    exp = gnp.exp
+    tanh = gnp.tanh
+    logistic = gnp.logistic
+    log = gnp.log
+    sum = gnp.sum
+    cumsum = lambda arr, **kwargs: gnp.as_garray(np.cumsum(gnp.as_numpy_array(arr), **kwargs))
 
 
-    raise NotImplemented
+    linalg = new_namespace()
+    linalg.norm = lambda arr: np.linalg.norm(gnp.as_numpy_array(arr))  # HACK!

@@ -25,6 +25,16 @@ def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
     weights = initial
     last_gradient = None
     for i in range(iters):
+        if i % heartbeat == 0:
+            current_time = time.time()
+            print '[descend.gd:%f](%f) Iteration %d - Current objective: %f' % \
+                (current_time, current_time-last_time, i, objective.value_at(weights))
+            last_time = current_time
+            if save_to_file:
+                weights.save_to_file(save_to_file, i)
+            if callback:
+                callback(i)
+
         gradient = objective.gradient_at(weights) * -learning_rate
         weights += gradient
 
@@ -32,15 +42,7 @@ def gd(objective, initial, iters=100, heartbeat=10, save_to_file=None,
             weights += last_gradient * momentum_rate
         last_gradient = gradient
 
-        if i % heartbeat == 0:
-            current_time = time.time()
-            print '[descend.gd:%f](%f) Completed %d iterations. Current objective: %f' % \
-                (current_time, current_time-last_time, i, objective.value_at(weights))
-            last_time = current_time
-            if save_to_file:
-                weights.save_to_file(save_to_file, i)
-            if callback:
-                callback(i)
+
 
     end_time = time.time()
     print 'Total time elapsed: ', end_time-start_time

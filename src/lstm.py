@@ -217,7 +217,7 @@ if __name__ == '__main__':
 
     wt = LSTMObjectiveWeights(lstm.to_compact_weights())
     obj = LSTMObjective(trainingIn, trainingOut, lstm, l2reg=0.000)
-    wt = gd(obj, wt, iters=2000, heartbeat=200, learning_rate=0.05, momentum_rate=0.5)
+    wt = gd(obj, wt, iters=2000, heartbeat=5, learning_rate=0.05, momentum_rate=0.5)
 
 
     print "FINAL WEIGHTS"
