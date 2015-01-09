@@ -12,9 +12,15 @@ parser.add_argument('-s', '--size', metavar='N', type=int, default=4096, help='M
 parser.add_argument('-i', '--iters', metavar='I', type=int, default=5, help='Number of test iterations')
 parser.add_argument('-m', '--mode', dest='mode',
                    default=NUMPY, help='Run mode (np, gnp, or theano)')
+parser.add_argument('-t', '--tensor3', dest='tensor3', action='store_const', default=False,
+                   const=True) 
 args = parser.parse_args()
 
 N = args.size
+
+flop = 2*N*N*N
+if args.tensor3:
+    flop *=N
 
 if args.mode == GNUMPY:
     import gnumpy as gnp
@@ -22,37 +28,38 @@ if args.mode == GNUMPY:
     randn = gnp.randn
     dot = lambda a,b: a.dot(b)
 
-    a = randn(N,N)
-    b = randn(N,N)
 elif args.mode == NUMPY:
     import numpy as np
     print 'Using Numpy'
-    randn = np.random.randn
+    randn = lambda *args: np.random.randn(*args).astype(np.float32)
     dot = lambda a,b: a.dot(b)
 
-    a = randn(N,N).astype(np.float32)
-    b = randn(N,N).astype(np.float32)
 elif args.mode == THEANO:
     import numpy as np
     import theano.tensor as T
     from theano import function, shared, sandbox, config
     print 'Using Theano'
-    randn = np.random.randn
+    randn = lambda *args: np.random.randn(*args).astype(np.float32)
     aa = T.matrix('a')
     bb = T.matrix('b')
     cc = aa.dot(bb)
     dot = function([aa,bb],sandbox.cuda.basic_ops.gpu_from_host(cc))
 
-    a = randn(N,N).astype(np.float32)
-    b = randn(N,N).astype(np.float32)
 
-print 'Initializing %dX%d matrices' % (N,N)
+if args.tensor3:
+    print 'Initializing %dX%dX%d matrices' % (N,N,N)
+    a = randn(N,N,N)
+else:
+    print 'Initializing %dX%d matrices' % (N,N)
+    a = randn(N,N)
+b = randn(N,N)
+
 
 def test(a,b):
     ops = 0
     for i in range(args.iters):
         c= dot(a,b)
-        ops += 2*N*N*N
+        ops += flop
         print '.',
         sys.stdout.flush()
     print '!'
