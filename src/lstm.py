@@ -6,7 +6,7 @@ import math_interface as np
 from objective import Objective, Weights
 from activations import Logistic, Tanh
 from loss import Squared
-from layers import NNLayer, LSTMLayerWeights, LSTMWeights
+from layers import NNLayer, LSTMLayer, LSTMWeights
 from descend import gd
 
 
@@ -186,7 +186,7 @@ if __name__ == '__main__':
     #trainingOut = [trainingOut0]
 
     f, g, h = Logistic(), Logistic(), Tanh()
-    lstm_layer1 = LSTMLayerWeights(2, 4, f, g, h)
+    lstm_layer1 = LSTMLayer(2, 4, f, g, h)
     lstm_layer2 = NNLayer(4, 4, Tanh(), usebias=False)
     lstm_layer3 = NNLayer(4, 1, Tanh(), usebias=False)
     #lstm_layer1 = LSTMLayerWeights(2, 4, f, g, h)

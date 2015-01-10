@@ -52,8 +52,6 @@ def softmax(arr, axis=0):
     >>> softmax([[0.1, 0.9],[0.2, 0.8]], axis=0)
     array([[ 0.47502081,  0.52497919],
            [ 0.52497919,  0.47502081]])
-
-
     """
     arr = np.array(arr)
     shape = arr.shape

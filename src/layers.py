@@ -7,6 +7,9 @@ WEIGHT_INIT_RANGE = 0.1
 
 
 class LayerBase(object):
+    def __init__(self):
+        self.weights = None
+
     def forward_across_time(self, input):
         raise NotImplementedError
 
@@ -26,16 +29,22 @@ class LayerBase(object):
         raise NotImplementedError
 
 
-def BuildCompactNetWeights(arg_names):
+def build_compact_weights(arg_names, class_name="CompactNetWeights"):
     """
-    Builds compact network weights, which is a list of matrices
+    Builds compact network weights class (subclass of Weights), which is a list of matrices.
+
+    The syntax is like that of named_tuple
     :param arg_names:
     :return:
+    >>> build_compact_weights("a b c", class_name="ABC")(1, 2, 3)
+    ABC{'a': 1, 'c': 3, 'b': 2}
     """
     arg_names = arg_names.split(' ')
     numargs = len(arg_names)
+
     class CompactNetWeights(Weights):
         def __init__(self, *args):
+            super(CompactNetWeights, self).__init__()
             if len(args) != numargs:
                 raise ValueError('Expected %d args. Got %d' % (numargs, len(args)))
             self.weights = args
@@ -62,6 +71,12 @@ def BuildCompactNetWeights(arg_names):
                 self_mat = self.weights[mat]
                 total += np.sum(self_mat*other_mat)
             return total
+
+        def __repr__(self):
+            fields_dict = {field: getattr(self, field) for field in arg_names}
+            return "%s%s" % (class_name, str(fields_dict))
+    CompactNetWeights.__name__ = class_name
+
     return CompactNetWeights
 
 
@@ -76,9 +91,12 @@ BackIntermediate = namedtuple("BackIntermediate",
     "hidden_deriv output_gate_delta cell_deriv cell_delta forget_delta input_delta del_k del_h")
 
 
-NNWeights = BuildCompactNetWeights("ip bias")
+NNWeights = build_compact_weights("ip bias", class_name="NNWeights")
+
+
 class NNLayer(LayerBase):
     def __init__(self, n_input, n_output, act, usebias=True):
+        super(NNLayer, self).__init__()
         self.n_input = n_input  # number of inputs into this layer
         self.n_output = n_output
         self.usebias = usebias
@@ -147,14 +165,18 @@ class NNLayer(LayerBase):
         weights_in_layer = [np.zeros(weight.shape) for weight in self.to_compact_weights()]
         return NNWeights(*weights_in_layer)
 
-LSTMWeights = BuildCompactNetWeights("forgetw_x forgetw_h inw_x inw_h outw_x outw_h cellw_x cellw_h")
-class LSTMLayerWeights(LayerBase):
+
+LSTMWeights = build_compact_weights("forgetw_x forgetw_h inw_x inw_h outw_x outw_h cellw_x cellw_h", class_name="LSTMWeights")
+
+
+class LSTMLayer(LayerBase):
     """
     Stores all of the weights for a single LSTM layer and computes derivatives given forward and backward
     context.
     """
 
     def __init__(self, n_input, n, act_f, act_g, act_h):
+        super(LSTMLayer, self).__init__()
         self.n = n  # number of units on this layer
         self.n_input = n_input  # number of inputs into this layer
 
