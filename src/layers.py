@@ -37,10 +37,7 @@ def BuildCompactNetWeights(arg_names):
     class CompactNetWeights(Weights):
         def __init__(self, *args):
             if len(args) != numargs:
-                print args
-                print numargs
-                print len(args)
-                raise blah
+                raise ValueError('Expected %d args. Got %d' % (numargs, len(args)))
             self.weights = args
             for i in range(len(arg_names)):
                 setattr(self, arg_names[i], args[i])

@@ -2,6 +2,7 @@
 Network loss functions
 """
 import math_interface as np
+import math_funcs
 
 __author__ = 'justin'
 
@@ -20,17 +21,7 @@ class Loss(object):
 class Softmax(Loss):
     @staticmethod
     def softmax(vec):
-        shape = vec.shape
-        dims = sum([1 if i>1 else 0 for i in shape])
-        if dims == 1:
-            e = np.exp(vec)
-            return e / np.sum(e)
-        if dims == 2:
-            m = np.zeros(vec.shape)
-            for i in range(shape[0]):
-                e = np.exp(vec[i, :])
-                m[i, :] = e / np.sum(e)
-            return m
+        return math_funcs.softmax(vec, axis=1)
 
     def __init__(self):
         super(Softmax, self).__init__()
