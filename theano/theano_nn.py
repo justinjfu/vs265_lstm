@@ -7,47 +7,56 @@ import theano
 import scipy.weave as wv
 from theano import pp, shared, function
 from theano.tensor.shared_randomstreams import RandomStreams
+from theano_utils import gpu_host
+from watchers import *
 
 rng = np.random
 randn = lambda *dims: rng.randn(*dims).astype(np.float32)
 
-def theano_compile(f):
-    def wrapper(*args, **kwargs):
-        result = f(*args, **kwargs)
-        compiled = function(args, result)
-        return compiled
-    return wrapper
-
-@theano_compile
-def plus(x, y, k=2):
-    return x+y*k
-
 class TheanoLayer(object):
     n_instances = 0
-
     def __init__(self):
         self.layer_id = TheanoLayer.n_instances 
         TheanoLayer.n_instances += 1
 
     def forward(self, prev_layer):
-        pass
+        raise NotImplemented
 
     def params(self):
+        """ Return a list of trainable parameters """
+        return []
+
+    def __getstate__(self):
+        """ Serialization """
+        return None
+
+    def __setstate__(self, state):
+        """ Deserialization """
         pass
 
-# Inner product layer
 class IPLayer(TheanoLayer):
+    """ Inner product layer """
     def __init__(self, n_in, n_out):
         super(IPLayer, self).__init__()
         self.w = theano.shared(randn(n_in, n_out), name="w_ip"+str(self.layer_id))
+        self.b = theano.shared(randn(n_out), name="b_ip"+str(self.layer_id))
 
     def forward(self, previous_expr):
-        return previous_expr.dot(self.w)#self.w.dot(previous_expr)
+        return previous_expr.dot(self.w)+self.b
 
     def params(self):
         return [self.w]
 
+    def __getstate__(self):
+        return (self.w, self.b)
+
+    def __setstate__(self, state):
+        w, b = state
+        self.w = w
+        self.b = b
+
 class ActivationLayer(TheanoLayer):
+    """ Activation layer """
     def __init__(self, act):
         super(ActivationLayer, self).__init__()
         self.act = act
@@ -55,15 +64,18 @@ class ActivationLayer(TheanoLayer):
     def forward(self, previous):
         return self.act(previous)
 
-    def params(self):
-        return []
 
 TanhLayer = ActivationLayer(T.tanh)
 SigmLayer = ActivationLayer(T.nnet.sigmoid)
 SoftMaxLayer = ActivationLayer(T.nnet.softmax)
+ReLULayer = ActivationLayer(T.nnet.softplus)
 
 class LossLayer(object):
-    pass
+    def loss(self, labels, predictions):
+        """
+        Return loss summed across training examples
+        """
+        raise NotImplemented
 
 class SquaredLoss(LossLayer):
     def __init__(self):
@@ -82,15 +94,6 @@ class CrossEntLoss(LossLayer):
         loss = T.nnet.categorical_crossentropy(predictions, labels)
         return T.sum(loss)
 
-class Trainable(object):
-    @property
-    def obj(self):
-        pass
-    @property
-    def params(self):
-        pass
-    def args(self):
-        pass
 
 class Network(object):
     def __init__(self, layers, loss):
@@ -99,16 +102,26 @@ class Network(object):
 
         self.data = T.matrix('data')
         self.labels = T.matrix('labels')
-        net_out = self.data
-        for layer in layers:
-            net_out = layer.forward(net_out)
-        self.net_out = net_out
-        self.obj = loss.loss(self.labels, net_out)
+        self.net_out, self.train_obj = self.prepare_objective(self.data, self.labels)
 
         #setup for gradients
-        self.params = []
+        self.params_list = []
         for layer in layers:
-            self.params.extend(layer.params())
+            self.params_list.extend(layer.params())
+
+    def prepare_objective(self, data, labels):
+        net_out = data
+        for layer in self.layers:
+            net_out = layer.forward(net_out)
+        net_out = net_out
+        obj = self.loss.loss(labels, net_out)
+        return net_out, obj
+
+    def params(self):
+        return self.params_list
+
+    def obj(self):
+        return self.train_obj
 
     def args(self):
         return [self.data, self.labels]
@@ -127,14 +140,14 @@ def train_gd(trainable, eta=0.01):
 
     train = theano.function(
         inputs=trainable.args(),
-        outputs=[obj],
+        outputs=[gpu_host(obj)],
         updates=updates
     )
     return train
 
 def train_gd_momentum(trainable, eta=0.01, momentum=0.5):
-    obj = trainable.obj
-    params = trainable.params
+    obj = trainable.obj()
+    params = trainable.params()
     gradients = T.grad(obj, params)
 
     momentums = [theano.shared(np.copy(param.get_value())) for param in params]
@@ -152,31 +165,51 @@ def train_gd_momentum(trainable, eta=0.01, momentum=0.5):
     )
     return train
 
-def one_hot(i, n):
-    v = np.zeros(n)
-    v[i] = 1
-    return v
+def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.5):
+    obj = trainable.obj()
+    params = trainable.params()
 
-N = 10
-dims = 200
-data = randn(N, dims)
-#labels = rng.randint(size=(1,N), low=0, high=2).astype(np.float32)
-labels = np.array([ one_hot(i%2, 2) for i in range(N)]).astype(np.float32)
-print labels
+    data = theano.shared(data)
+    labels = theano.shared(labels)
+    _, obj = trainable.prepare_objective(data, labels) 
 
-net = Network([IPLayer(dims, 100), TanhLayer, IPLayer(100, 2), SoftMaxLayer],
-                CrossEntLoss())
-train = train_gd_momentum(net)
-predict = net.predict()
+    gradients = T.grad(obj, params)
 
-t = time.time()
-print 'Start!'
-for i in range(500):
-    loss = train(data, labels)
-    print i, loss[0]
-print 'Time: ', time.time()-t
+    momentums = [theano.shared(np.copy(param.get_value())) for param in params]
 
-print 'GOLD:',labels
-pred = predict(data)[0]
-rounded = np.round(pred)
-print 'PRED:',rounded
+    updates = []
+    for i in range(len(gradients)):
+        updates.append((params[i], gpu_host(params[i]-eta*(gradients[i]+momentums[i]))))
+    for i in range(len(gradients)):
+        updates.append((momentums[i], gradients[i]))
+
+    train = theano.function(
+        inputs=[],
+        outputs=[obj],
+        updates=updates
+    )
+    return train
+
+if __name__ == "__main__":
+    def one_hot(i, n):
+        v = np.zeros(n)
+        v[i] = 1
+        return v
+
+    N = 50000
+    dims = 200
+    data = randn(N, dims)
+    #labels = rng.randint(size=(1,N), low=0, high=2).astype(np.float32)
+    labels = np.array([ one_hot(i%2, 2) for i in range(N)]).astype(np.float32)
+
+    net = Network([IPLayer(dims, 1000), TanhLayer, IPLayer(1000,300), TanhLayer, IPLayer(300, 100), TanhLayer, IPLayer(100,2), SoftMaxLayer],
+                    CrossEntLoss())
+    predictor = net.predict()
+
+    optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.00001)
+    optimizer.addWatcher(InfoWatcher(OnIter(5)))
+    optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(5)))
+    optimizer.addWatcher(TimeWatcher(OnEnd()))
+
+    optimizer.optimize(300) # 300 iters
+
