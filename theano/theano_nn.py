@@ -149,14 +149,16 @@ def train_gd_momentum(trainable, eta=0.01, momentum=0.5):
     obj = trainable.obj()
     params = trainable.params()
     gradients = T.grad(obj, params)
+    eta = np.array(eta).astype(np.float32)
+    momentum = np.array(momentum).astype(np.float32)
 
     momentums = [theano.shared(np.copy(param.get_value())) for param in params]
 
     updates = []
     for i in range(len(gradients)):
-        updates.append((params[i], params[i]-eta*(gradients[i]+momentums[i])))
-    for i in range(len(gradients)):
-        updates.append((momentums[i], gradients[i]))
+        update_gradient = eta*(gradients[i])+momentum*momentums[i]
+        updates.append((params[i], gpu_host(params[i]-update_gradient)))
+        updates.append((momentums[i], gpu_host(update_gradient)))
 
     train = theano.function(
         inputs=trainable.args(),
@@ -165,9 +167,11 @@ def train_gd_momentum(trainable, eta=0.01, momentum=0.5):
     )
     return train
 
-def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.5):
-    obj = trainable.obj()
+def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
     params = trainable.params()
+    eta = np.array(eta).astype(np.float32)
+    momentum = np.array(momentum).astype(np.float32)
+
 
     data = theano.shared(data)
     labels = theano.shared(labels)
@@ -175,13 +179,13 @@ def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.5):
 
     gradients = T.grad(obj, params)
 
-    momentums = [theano.shared(np.copy(param.get_value())) for param in params]
+    momentums = [theano.shared(np.zeros(param.get_value().shape).astype(np.float32)) for param in params]
 
     updates = []
     for i in range(len(gradients)):
-        updates.append((params[i], gpu_host(params[i]-eta*(gradients[i]+momentums[i]))))
-    for i in range(len(gradients)):
-        updates.append((momentums[i], gradients[i]))
+        update_gradient = eta*(gradients[i])+momentum*momentums[i]
+        updates.append((params[i], gpu_host(params[i]-update_gradient)))
+        updates.append((momentums[i], gpu_host(update_gradient)))
 
     train = theano.function(
         inputs=[],
@@ -196,7 +200,7 @@ if __name__ == "__main__":
         v[i] = 1
         return v
 
-    N = 50000
+    N = 1000
     dims = 200
     data = randn(N, dims)
     #labels = rng.randint(size=(1,N), low=0, high=2).astype(np.float32)
@@ -206,12 +210,12 @@ if __name__ == "__main__":
                     CrossEntLoss())
     predictor = net.predict()
 
-    optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.00001)
+    optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.0001)
     #optimizer = FOptimizer(train_gd_momentum, net, eta=0.00001)
     optimizer.addWatcher(InfoWatcher(OnIter(5)))
-    optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(5)))
+    #optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(10)))
     optimizer.addWatcher(TimeWatcher(OnEnd()))
 
-    optimizer.optimize(50) # 300 iters
+    optimizer.optimize(400) # 300 iters
     #optimizer.optimize(50, data, labels) # 300 iters
 
