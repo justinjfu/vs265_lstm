@@ -207,9 +207,11 @@ if __name__ == "__main__":
     predictor = net.predict()
 
     optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.00001)
+    #optimizer = FOptimizer(train_gd_momentum, net, eta=0.00001)
     optimizer.addWatcher(InfoWatcher(OnIter(5)))
     optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(5)))
     optimizer.addWatcher(TimeWatcher(OnEnd()))
 
-    optimizer.optimize(300) # 300 iters
+    optimizer.optimize(50) # 300 iters
+    #optimizer.optimize(50, data, labels) # 300 iters
 

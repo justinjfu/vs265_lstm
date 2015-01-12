@@ -30,14 +30,14 @@ class Optimizer(object):
             if watcher.trigger(self.watcher_info):
                 watcher.action(self.watcher_info)
 
-    def optimize(self, n_iters):
+    def optimize(self, n_iters, *args):
         time_start = time.time()
         for i in range(n_iters):
-            self.optimize_iter(i)
+            self.optimize_iter(i, *args)
             self.watcher_info = WatcherInfo(i, time.time()-time_start, self.get_loss(i), i==n_iters-1)
             self.triggerWatchers()
 
-    def optimize_iter(self, i):
+    def optimize_iter(self, i, *args):
         raise NotImplementedError
     
     def get_loss(self, i):
@@ -119,8 +119,8 @@ class FOptimizer(Optimizer):
         self.optimizer = f(*args, **kwargs)
         self.loss = 0
 
-    def optimize_iter(self, i):
-        self.loss = self.optimizer()
+    def optimize_iter(self, i, *args):
+        self.loss = self.optimizer(*args)
 
     def get_loss(self, i):
         return self.loss[0]
