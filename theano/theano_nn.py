@@ -7,11 +7,11 @@ import theano
 import scipy.weave as wv
 from theano import pp, shared, function
 from theano.tensor.shared_randomstreams import RandomStreams
-from theano_utils import gpu_host
+from theano_utils import gpu_host, NP_FLOATX, randn
 from watchers import *
 
 rng = np.random
-randn = lambda *dims: rng.randn(*dims).astype(np.float32)
+
 
 class TheanoLayer(object):
     n_instances = 0
@@ -34,6 +34,7 @@ class TheanoLayer(object):
         """ Deserialization """
         pass
 
+
 class IPLayer(TheanoLayer):
     """ Inner product layer """
     def __init__(self, n_in, n_out):
@@ -45,7 +46,7 @@ class IPLayer(TheanoLayer):
         return previous_expr.dot(self.w)+self.b
 
     def params(self):
-        return [self.w]
+        return [self.w, self.b]
 
     def __getstate__(self):
         return (self.w, self.b)
@@ -54,6 +55,7 @@ class IPLayer(TheanoLayer):
         w, b = state
         self.w = w
         self.b = b
+
 
 class ActivationLayer(TheanoLayer):
     """ Activation layer """
@@ -70,12 +72,14 @@ SigmLayer = ActivationLayer(T.nnet.sigmoid)
 SoftMaxLayer = ActivationLayer(T.nnet.softmax)
 ReLULayer = ActivationLayer(T.nnet.softplus)
 
+
 class LossLayer(object):
     def loss(self, labels, predictions):
         """
         Return loss summed across training examples
         """
         raise NotImplemented
+
 
 class SquaredLoss(LossLayer):
     def __init__(self):
@@ -85,6 +89,7 @@ class SquaredLoss(LossLayer):
         loss = labels-predictions
         loss = T.sum(loss*loss)
         return loss
+
 
 class CrossEntLoss(LossLayer):
     def __init__(self):
@@ -129,6 +134,7 @@ class Network(object):
     def predict(self):
         return theano.function(inputs=[self.data], outputs=[self.net_out])
 
+
 def train_gd(trainable, eta=0.01):
     obj = trainable.obj
     params = trainable.params
@@ -144,6 +150,7 @@ def train_gd(trainable, eta=0.01):
         updates=updates
     )
     return train
+
 
 def train_gd_momentum(trainable, eta=0.01, momentum=0.5):
     obj = trainable.obj()
@@ -167,11 +174,11 @@ def train_gd_momentum(trainable, eta=0.01, momentum=0.5):
     )
     return train
 
+
 def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
     params = trainable.params()
-    eta = np.array(eta).astype(np.float32)
-    momentum = np.array(momentum).astype(np.float32)
-
+    eta = np.array(eta).astype(NP_FLOATX)
+    momentum = np.array(momentum).astype(NP_FLOATX)
 
     data = theano.shared(data)
     labels = theano.shared(labels)
@@ -179,7 +186,7 @@ def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
 
     gradients = T.grad(obj, params)
 
-    momentums = [theano.shared(np.zeros(param.get_value().shape).astype(np.float32)) for param in params]
+    momentums = [theano.shared(np.zeros(param.get_value().shape).astype(NP_FLOATX)) for param in params]
 
     updates = []
     for i in range(len(gradients)):
@@ -192,7 +199,13 @@ def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
         outputs=[obj],
         updates=updates
     )
-    return train
+    return lambda: train()[0]
+
+
+def run_optimize_simple(train_fn, iters, *args):
+    for i in range(iters):
+        loss = train_fn(*args)
+        print i,':', loss
 
 if __name__ == "__main__":
     def one_hot(i, n):
@@ -210,12 +223,15 @@ if __name__ == "__main__":
                     CrossEntLoss())
     predictor = net.predict()
 
-    optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.0001)
-    #optimizer = FOptimizer(train_gd_momentum, net, eta=0.00001)
-    optimizer.addWatcher(InfoWatcher(OnIter(5)))
-    #optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(10)))
-    optimizer.addWatcher(TimeWatcher(OnEnd()))
-
-    optimizer.optimize(400) # 300 iters
-    #optimizer.optimize(50, data, labels) # 300 iters
+    if False:
+        optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.0001)
+        #optimizer = FOptimizer(train_gd_momentum, net, eta=0.00001)
+        optimizer.addWatcher(InfoWatcher(OnIter(5)))
+        #optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(10)))
+        optimizer.addWatcher(TimeWatcher(OnEnd()))
+        optimizer.optimize(400) # 300 iters
+        #optimizer.optimize(50, data, labels) # 300 iters
+    else:
+        train_fn = train_gd_momentum_host(net, data, labels, eta=0.0001)
+        run_optimize_simple(train_fn, 400)
 

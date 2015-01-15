@@ -1,8 +1,22 @@
 import theano
 import theano.tensor as T
+import numpy as np
 
 DEVICE = theano.config.device
 FLOATX = theano.config.floatX
+
+if FLOATX == 'float32':
+    NP_FLOATX = np.float32
+elif FLOATX == 'float64':
+    NP_FLOATX = np.float64
+
+# randn as floatX
+randn = lambda *dims: np.random.randn(*dims).astype(NP_FLOATX)
+
+def set_device(device):
+    global DEVICE
+    DEVICE = device
+
 
 def theano_compile(*args0, **kwargs0):
     """
@@ -34,6 +48,7 @@ def theano_compile(*args0, **kwargs0):
             namespace.f = f
             return wrapper
         return argwrapper
+
 
 def hasgpu():
     """
