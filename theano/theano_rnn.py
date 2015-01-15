@@ -37,15 +37,16 @@ class FeedForwardLayer(BaseLayer):
     """
     def __init__(self):
         super(FeedForwardLayer, self).__init__()
+        self.zero = theano.shared(0)
 
     def forward(self, prev_layer):
         raise NotImplementedError
 
     def forward_time(self, prev_layer, prev_state):
-        return self.forward(prev_layer), None
+        return self.forward(prev_layer), self.zero
 
     def initial_state(self):
-        return 0  # Unused
+        return self.zero  # Unused
 
 
 class ActivationLayer(FeedForwardLayer):
@@ -79,15 +80,23 @@ class RNNIPLayer(BaseLayer):
         self.act = act
 
     def forward_time(self, prev_layer, prev_state):
-        output = self.act(prev_layer.dot(self.w_ff) + prev_state.dot(self.w_r))
-        return output, output
+        #dbgprint = theano.printing.Print('debug')
+        #import pdb; pdb.set_trace()
+
+        #new_state = self.w_r
+        #new_state = prev_state.dot(self.w_r)  <--- I cannot uncomment this
+        new_state = prev_state
+
+        output = self.act(prev_layer.dot(self.w_ff) + new_state)
+        return output, new_state
 
     def initial_state(self):
+        #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
         return np.zeros(self.n_out)
 
     def params(self):
         """ Return a list of trainable parameters """
-        return [self.w_ff, self.w_r]
+        return [self.w_ff]
 
 
 class LSTMLayer(BaseLayer):
@@ -112,43 +121,46 @@ class RecurrentNetwork(object):
 
     def predict(self):
         x = T.matrix('X')
-        previous_layer = x
+        pred = theano.function([x], self.forward_across_time(x))
+        return pred
+
+    def forward_across_time(self, training_ex):
+        previous_layer = training_ex
         for layer in self.layers:
             hidden_state = layer.initial_state()
 
             def loop(prev_layer, prev_state):
-                return layer.forward_time(prev_layer, prev_state)
+                next_layer, next_state = layer.forward_time(prev_layer, prev_state)
+                return next_layer, next_state
 
             results, updates = theano.scan(fn=loop,
                                             sequences=[previous_layer],
                                             outputs_info=[None, hidden_state])
-            next_layer, _ = results
+            next_layer, hidden_states = results
             previous_layer = next_layer
-        pred = theano.function([x], previous_layer)
-        return pred
 
+
+            """
+            n_timestep, n_dim = previous_layer.shape
+            for t in range(n_timestep):
+                next_layer, hidden_state = loop(previous_layer[i], hidden_state)
+            """
+
+        return previous_layer
 
     def prepare_objective(self, data, labels):
         # data is a list of matrices
-        obj = T.scalar('objective')
-        for i in range(len(data)):
+        obj = None
+        for i in range(1):
             training_ex = data[i]
-            label = labels[i]
-
-            previous_layer = theano.shared(training_ex)
-            for layer in self.layers:
-                hidden_state = layer.initial_state()
-
-                def loop(prev_layer, prev_state):
-                    return layer.forward_time(prev_layer, prev_state)
-
-                results, updates = theano.scan(fn=loop,
-                                               sequences=[previous_layer],
-                                               outputs_info=[None, hidden_state])
-                next_layer, _ = results
-                previous_layer = next_layer
-
-            obj += self.loss.loss(label, previous_layer)
+            label = theano.shared(labels[i])
+            print 'tex:', training_ex
+            net_output = self.forward_across_time(theano.shared(training_ex))
+            layer_loss = self.loss.loss(label, net_output)
+            if obj:
+                obj += layer_loss
+            else:
+                obj = layer_loss
         return obj
 
 
@@ -172,6 +184,7 @@ def train_gd(trainable, eta=0.01):
 def train_gd_host(trainable, data, labels, eta=0.01):
     obj = trainable.prepare_objective(data, labels)
     params = trainable.params()
+    print 'PARAMS:', params
     gradients = T.grad(obj, params)
     updates = [None]*len(gradients)
 
@@ -179,6 +192,7 @@ def train_gd_host(trainable, data, labels, eta=0.01):
         updates[i] = (params[i], params[i]-eta*gradients[i])
 
     train = theano.function(
+        inputs=[],
         outputs=[obj],
         updates=updates)
     return train
@@ -188,10 +202,14 @@ def generate_parity_data(num):
     examples = []
     labels = []
     for i in range(num):
-        N = np.random.randint(low=0, high=10)
+        N = np.random.randint(low=1, high=10)
 
         rand_data = np.random.randint(size=(N, 1), low=0, high=2).astype(np.float32)
+        rand_data_0 = np.zeros((N, 1)).astype(np.float32)
+
         rand_label = np.cumsum(rand_data, axis=0) % 2
+        rand_data = np.hstack((rand_data, rand_label))
+
 
         examples.append(rand_data)
         labels.append(rand_label)
@@ -217,40 +235,71 @@ if __name__ == "__main__":
     """
 
     """
-    data = T.matrix('data')
-    w = theano.shared(randn(2, 2))
-    hidden = T.vector('hidden')
+    data, labels = generate_parity_data(1)
+    data = theano.shared(data[0])
+    label = theano.shared(labels[0])
 
-    def fff(i, data_slice, prev_state):
-        return w.dot(data_slice)+prev_state, prev_state+1
+    w = theano.shared(randn(1, 1))
+
+    def fff(prev_layer, prev_state):
+        output = w.dot(prev_layer)+prev_state
+        return output, prev_state
+
+    def fff(prev_layer, prev_state):
+        #import pdb; pdb.set_trace()
+        print prev_state
+        print prev_layer
+        print w
+        output = w.dot(prev_layer)+prev_state
+        return output, prev_layer
 
     results, updates = theano.scan(
         fn=fff,
-        outputs_info=[None, np.ones(2)],
-        sequences=[T.arange(5), data])
+        outputs_info=[None, theano.shared(np.ones((1, 1)))],
+        sequences=[data])
 
-    blah = theano.function(inputs=[data], outputs=results)
+    blah = theano.function(inputs=[], outputs=results)
 
-    input = randn(5,2)
-    print input, input.shape
-    a = blah(input)
+    a = blah()
     print a
+
+    loss = SquaredLoss().loss(label, results[0])
+    blah = theano.function(inputs=[], outputs=loss)
+    print blah()
+
+    gd = T.grad(loss, [w])
+    blah = theano.function(inputs=[], outputs=gd)
+    print 'gradient:', blah()
+
+
+
     """
 
     #"""
     data, labels = generate_parity_data(10)
+    print 'data:', data[0].T
 
-    l1 = RNNIPLayer(1, 1, T.nnet.sigmoid)
+    l1 = RNNIPLayer(2, 1, T.nnet.sigmoid)
 
     rnn = RecurrentNetwork([l1], SquaredLoss())
     p = rnn.predict()
 
+    ob = rnn.prepare_objective(data, labels)
+    fff = theano.function([], ob)
+    print fff()
+
     print p(data[0])
-    #train_fn = train_gd_host(rnn, data, labels, eta=0.001)
+    train_fn = train_gd_host(rnn, data, labels, eta=0.2)
 
-    #for i in range(100):
-    #    train_fn(data, labels)
+    for i in range(80):
+        loss = train_fn()[0]
+        if i%5 == 0:
+            print i,':',loss
 
+
+    print labels[0]
+    p = rnn.predict()
+    print p(data[0])
     #data, labels = generate_parity_data(1)
     #predicted = p.predict(data)
     #print predicted
