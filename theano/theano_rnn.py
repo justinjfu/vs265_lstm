@@ -3,6 +3,7 @@ import theano.tensor as T
 from theano_utils import randn, NP_FLOATX
 from theano_nn import SquaredLoss, TanhLayer, SigmLayer, SoftMaxLayer
 import numpy as np
+import theano.typed_list
 
 __author__ = 'justin'
 
@@ -75,8 +76,8 @@ class RNNIPLayer(BaseLayer):
     def __init__(self, n_in, n_out, act):
         super(RNNIPLayer, self).__init__()
         self.n_out = n_out
-        self.w_ff = theano.shared(randn(n_in, n_out), name="rnn_ip_wff_"+str(self.layer_id))
-        self.w_r = theano.shared(randn(n_out, n_out), name="rnn_ip_wr_"+str(self.layer_id))
+        self.w_ff = theano.shared(0.2*randn(n_in, n_out), name="rnn_ip_wff_"+str(self.layer_id))
+        self.w_r = theano.shared(0.2*randn(n_out, n_out), name="rnn_ip_wr_"+str(self.layer_id))
         self.act = act
 
     def forward_time(self, prev_layer, prev_state):
@@ -133,14 +134,34 @@ class RecurrentNetwork(object):
             next_layer, hidden_states = results
             previous_layer = next_layer
 
-
-            """
-            n_timestep, n_dim = previous_layer.shape
-            for t in range(n_timestep):
-                next_layer, hidden_state = loop(previous_layer[i], hidden_state)
-            """
-
         return previous_layer
+
+    def predict_list(self):
+        results, results_list, updates, data_list = self.forward_across_time_list()
+        pred = theano.function(inputs=[data_list, results_list], outputs=results, updates=updates)
+        return pred
+
+    def forward_across_time_list(self):
+        raise NotImplementedError  # Lists don't work well yet
+        data_list = theano.typed_list.TypedListType(T.dmatrix)(name='data_list')
+        length = theano.typed_list.length(data_list)
+
+        results_list = theano.typed_list.TypedListType(T.dmatrix)(name='results_list')
+        def ns(): pass
+        ns.results_list = results_list
+
+        def loop(i, data_list_arg):
+            training_ex = data_list_arg[i]
+            output_layer = self.forward_across_time(training_ex)
+            ns.results_list = ns.results_list.append(output_layer)
+            ns.results_list = ns.results_list.append(training_ex)
+            l =  theano.typed_list.length(ns.results_list)
+            return i, l
+        results, updates = theano.scan(fn=loop,
+                    sequences=[T.arange(length, dtype='int64')],
+                    outputs_info=[None, None],
+                    non_sequences=[data_list])
+        return results, ns.results_list, updates, data_list
 
     def prepare_objective(self, data, labels):
         # data is a list of matrices
@@ -156,19 +177,37 @@ class RecurrentNetwork(object):
                 obj = layer_loss
         return obj
 
+    def prepare_objective_var(self, training_ex, label):
+        # data is a list of matrices
+        net_output = self.forward_across_time(training_ex)
+        layer_loss = self.loss.loss(label, net_output)
+        obj = layer_loss
+        return obj
 
-def train_gd(trainable, eta=0.01):
-    obj = trainable.obj
-    params = trainable.params
+import theano.ifelse
+def train_gd(obj, params, args, batch_size=10, eta=0.01):
     gradients = T.grad(obj, params)
-    updates = [None]*len(gradients)
 
-    for i in range(len(gradients)):
-        updates[i] = (params[i], params[i]-eta*gradients[i])
+    ii = theano.shared(0)
+    total_grad = [theano.shared(np.zeros_like(param.get_value())) for param in params]
+
+    updates = []
+
+    for i in range(len(params)):
+        updates.append((params[i], theano.ifelse.ifelse(T.eq(T.mod(ii, batch_size), 0),
+                                                        params[i]-eta*total_grad[i],
+                                                        params[i] )))
+    updates.append((ii, ii+1))
+
+    for i in range(len(params)):
+        updates.append((total_grad[i], theano.ifelse.ifelse(T.eq(T.mod(ii, batch_size), 0),
+                                                            T.zeros_like(total_grad[i]),
+                                                            total_grad[i]+gradients[i]) ))
+
 
     train = theano.function(
-        inputs=trainable.args(),
-        outputs=[obj],
+        inputs=args,
+        outputs=[obj, ii],
         updates=updates
     )
     return train
@@ -186,16 +225,15 @@ def train_gd_host(trainable, data, labels, eta=0.01):
 
     train = theano.function(
         inputs=[],
-        outputs=[obj],
         updates=updates)
     return train
 
 
-def generate_parity_data(num):
+def generate_parity_data(num, l):
     examples = []
     labels = []
     for i in range(num):
-        N = np.random.randint(low=3, high=10)
+        N = np.random.randint(low=l, high=l+1)
 
         rand_data = np.random.randint(size=(N, 1), low=0, high=2).astype(np.float32)
 
@@ -242,39 +280,16 @@ def test_rnn():
     blah = theano.function(inputs=[], outputs=gd)
     print 'gradient:', blah()
 
-if __name__ == "__main__":
-    np.random.seed(10)
 
-    """
-    x = T.scalar('x')
-    k = T.scalar('k')
-
-    def f(i, xx):
-        return xx+k, k
-
-    results, updates = theano.scan(
-        fn=f,
-        outputs_info=[np.array(0.0), None],
-        sequences=T.arange(5))
-    blah = theano.function(inputs=[k], outputs=results, updates=updates)
-    print blah(1)
-    """
-
-    #test_rnn()
-
-    #TODO:
-    # - Use theano's typed_list instead of python lists
-    # - Don't use shared variables on data/labels in forward pass loop (supply them as function args)
-
-    #"""
-    data, labels = generate_parity_data(5)
+def test_parity():
+    data, labels = generate_parity_data(1)
     print 'data:', data[0].T
 
-    l1 = RNNIPLayer(1, 2, T.tanh)
-    l2 = RNNIPLayer(2, 1, T.nnet.sigmoid)
+    l1 = RNNIPLayer(1, 1, T.tanh)
+    #l2 = RNNIPLayer(2, 1, T.nnet.sigmoid)
 
 
-    rnn = RecurrentNetwork([l1, l2], SquaredLoss())
+    rnn = RecurrentNetwork([l1], SquaredLoss())
     p = rnn.predict()
 
     ob = rnn.prepare_objective(data, labels)
@@ -297,7 +312,98 @@ if __name__ == "__main__":
     data, labels = generate_parity_data(2)
     for i in range(len(data)):
         predicted = p(data[0])
-        print 'New Data:', data[0]
         print "New Labels:",labels[0]
         print "New predict:", predicted
+
+    p_list = rnn.predict_list()
+    a = []
+    print p_list(data, a)
+    print a
+
+
+def test_list():
+    #TODO: typed_list doesn't seem to work with append/outputs
+    data_list = theano.typed_list.TypedListType(T.dmatrix)(name='data_list')
+    length = theano.typed_list.length(data_list)
+
+    out_list = theano.typed_list.TypedListType(T.dmatrix)(name='out_list')
+    def ff(i, dat_list, olist):
+        theano.typed_list.insert(olist, i, dat_list[i])
+        return dat_list[i], theano.typed_list.getitem(olist, i)
+    results, updates = theano.scan(
+        fn=ff,
+        sequences=[T.arange(length, dtype='int64')],
+        outputs_info=[None, None],
+        non_sequences=[data_list, out_list])
+
+    a = theano.function(inputs=[data_list, out_list], outputs=[results, out_list], updates=updates)
+
+    eye = np.eye
+    print a([eye(2), eye(2), eye(2)], [])
     #"""
+
+    """
+    out_list = theano.typed_list.TypedListType(T.dscalar)(name='out_list')
+    a = T.dscalar('a')
+    b = T.dscalar('b')
+    res = out_list.append(a).append(b)
+    f = theano.function(inputs=[a,b, out_list], outputs=[res])
+
+    print f(2,3, [])
+    """
+
+
+
+if __name__ == "__main__":
+    np.random.seed(10)
+
+    """
+    x = T.scalar('x')
+    k = T.scalar('k')
+
+    def f(i, xx):
+        return xx+k, k
+
+    results, updates = theano.scan(
+        fn=f,
+        outputs_info=[np.array(0.0), None],
+        sequences=T.arange(5))
+    blah = theano.function(inputs=[k], outputs=results, updates=updates)
+    print blah(1)
+    """
+    data, labels = generate_parity_data(20, 7)
+    print 'data:', data[0].T
+
+    l1 = RNNIPLayer(1, 10, T.tanh)
+    l2 = RNNIPLayer(10, 1, T.nnet.sigmoid)
+
+    rnn = RecurrentNetwork([l1, l2], SquaredLoss())
+    p = rnn.predict()
+
+    data_var = T.matrix('data')
+    label_var = T.matrix('labels')
+    ob = rnn.prepare_objective_var(data_var, label_var)
+    loss_func = theano.function([data_var, label_var], ob)
+
+    print p(data[0])
+    train_fn = train_gd(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.0037)
+
+    for i in range(4000):
+        for j in range(len(data)):
+            train_fn(data[j], labels[j])
+
+        if i % 20 == 0:
+            loss_tot = 0
+            for j in range(len(data)):
+                loss_tot += loss_func(data[j], labels[j])
+            print i, ':', loss_tot
+
+
+    print labels[0]
+    p = rnn.predict()
+    print p(data[0])
+
+    data, labels = generate_parity_data(1, 15)
+    print labels[0]
+    print p(data[0])
+
