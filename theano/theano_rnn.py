@@ -84,19 +84,19 @@ class RNNIPLayer(BaseLayer):
         #import pdb; pdb.set_trace()
 
         #new_state = self.w_r
-        #new_state = prev_state.dot(self.w_r)  <--- I cannot uncomment this
-        new_state = prev_state
+        new_state = self.w_r.dot(prev_state)  #<--- I cannot uncomment this
+        #new_state = prev_state
 
-        output = self.act(prev_layer.dot(self.w_ff) + new_state)
+        output = self.act(prev_layer.dot(self.w_ff)+new_state)
         return output, new_state
 
     def initial_state(self):
         #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
-        return np.zeros(self.n_out)
+        return theano.shared(np.zeros(self.n_out))
 
     def params(self):
         """ Return a list of trainable parameters """
-        return [self.w_ff]
+        return [self.w_ff, self.w_r]
 
 
 class LSTMLayer(BaseLayer):
@@ -130,8 +130,8 @@ class RecurrentNetwork(object):
             hidden_state = layer.initial_state()
 
             def loop(prev_layer, prev_state):
-                next_layer, next_state = layer.forward_time(prev_layer, prev_state)
-                return next_layer, next_state
+                nlayer, nstate = layer.forward_time(prev_layer, prev_state)
+                return nlayer, nstate
 
             results, updates = theano.scan(fn=loop,
                                             sequences=[previous_layer],
@@ -205,16 +205,49 @@ def generate_parity_data(num):
         N = np.random.randint(low=1, high=10)
 
         rand_data = np.random.randint(size=(N, 1), low=0, high=2).astype(np.float32)
-        rand_data_0 = np.zeros((N, 1)).astype(np.float32)
 
         rand_label = np.cumsum(rand_data, axis=0) % 2
-        rand_data = np.hstack((rand_data, rand_label))
+        #rand_data = np.hstack((rand_data, rand_label))
 
 
         examples.append(rand_data)
         labels.append(rand_label)
     return examples, labels
 
+
+def test_rnn():
+    data, labels = generate_parity_data(1)
+    print "DATA:", data[0]
+    data = theano.shared(data[0])
+    label = theano.shared(labels[0])
+
+    w = theano.shared(randn(2, 1))
+
+    def fff(prev_layer, prev_state):
+        #import pdb; pdb.set_trace()
+        print prev_state
+        print prev_layer
+        print w.get_value()
+        output = prev_layer.dot(w)+prev_state
+        return output, output+0
+
+    results, updates = theano.scan(
+        fn=fff,
+        outputs_info=[None, theano.shared(np.ones((1)))],
+        sequences=[data])
+
+    blah = theano.function(inputs=[], outputs=results)
+
+    a = blah()
+    print 'Output:', a
+
+    loss = SquaredLoss().loss(label, results[0])
+    blah = theano.function(inputs=[], outputs=loss)
+    print blah()
+
+    gd = T.grad(loss, [w])
+    blah = theano.function(inputs=[], outputs=gd)
+    print 'gradient:', blah()
 
 if __name__ == "__main__":
     np.random.seed(10)
@@ -234,52 +267,13 @@ if __name__ == "__main__":
     print blah(1)
     """
 
-    """
-    data, labels = generate_parity_data(1)
-    data = theano.shared(data[0])
-    label = theano.shared(labels[0])
-
-    w = theano.shared(randn(1, 1))
-
-    def fff(prev_layer, prev_state):
-        output = w.dot(prev_layer)+prev_state
-        return output, prev_state
-
-    def fff(prev_layer, prev_state):
-        #import pdb; pdb.set_trace()
-        print prev_state
-        print prev_layer
-        print w
-        output = w.dot(prev_layer)+prev_state
-        return output, prev_layer
-
-    results, updates = theano.scan(
-        fn=fff,
-        outputs_info=[None, theano.shared(np.ones((1, 1)))],
-        sequences=[data])
-
-    blah = theano.function(inputs=[], outputs=results)
-
-    a = blah()
-    print a
-
-    loss = SquaredLoss().loss(label, results[0])
-    blah = theano.function(inputs=[], outputs=loss)
-    print blah()
-
-    gd = T.grad(loss, [w])
-    blah = theano.function(inputs=[], outputs=gd)
-    print 'gradient:', blah()
-
-
-
-    """
+    #test_rnn()
 
     #"""
     data, labels = generate_parity_data(10)
     print 'data:', data[0].T
 
-    l1 = RNNIPLayer(2, 1, T.nnet.sigmoid)
+    l1 = RNNIPLayer(1, 1, T.nnet.sigmoid)
 
     rnn = RecurrentNetwork([l1], SquaredLoss())
     p = rnn.predict()
