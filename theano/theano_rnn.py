@@ -80,15 +80,9 @@ class RNNIPLayer(BaseLayer):
         self.act = act
 
     def forward_time(self, prev_layer, prev_state):
-        #dbgprint = theano.printing.Print('debug')
-        #import pdb; pdb.set_trace()
-
-        #new_state = self.w_r
-        new_state = self.w_r.dot(prev_state)  #<--- I cannot uncomment this
-        #new_state = prev_state
-
+        new_state = self.w_r.dot(prev_state)
         output = self.act(prev_layer.dot(self.w_ff)+new_state)
-        return output, new_state
+        return output, output+0
 
     def initial_state(self):
         #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
@@ -151,10 +145,9 @@ class RecurrentNetwork(object):
     def prepare_objective(self, data, labels):
         # data is a list of matrices
         obj = None
-        for i in range(1):
+        for i in range(len(data)):
             training_ex = data[i]
             label = theano.shared(labels[i])
-            print 'tex:', training_ex
             net_output = self.forward_across_time(theano.shared(training_ex))
             layer_loss = self.loss.loss(label, net_output)
             if obj:
@@ -202,7 +195,7 @@ def generate_parity_data(num):
     examples = []
     labels = []
     for i in range(num):
-        N = np.random.randint(low=1, high=10)
+        N = np.random.randint(low=3, high=10)
 
         rand_data = np.random.randint(size=(N, 1), low=0, high=2).astype(np.float32)
 
@@ -269,33 +262,42 @@ if __name__ == "__main__":
 
     #test_rnn()
 
+    #TODO:
+    # - Use theano's typed_list instead of python lists
+    # - Don't use shared variables on data/labels in forward pass loop (supply them as function args)
+
     #"""
-    data, labels = generate_parity_data(10)
+    data, labels = generate_parity_data(5)
     print 'data:', data[0].T
 
-    l1 = RNNIPLayer(1, 1, T.nnet.sigmoid)
+    l1 = RNNIPLayer(1, 2, T.tanh)
+    l2 = RNNIPLayer(2, 1, T.nnet.sigmoid)
 
-    rnn = RecurrentNetwork([l1], SquaredLoss())
+
+    rnn = RecurrentNetwork([l1, l2], SquaredLoss())
     p = rnn.predict()
 
     ob = rnn.prepare_objective(data, labels)
     fff = theano.function([], ob)
-    print fff()
 
     print p(data[0])
-    train_fn = train_gd_host(rnn, data, labels, eta=0.2)
+    train_fn = train_gd_host(rnn, data, labels, eta=0.1)
 
-    for i in range(80):
+    for i in range(800):
         loss = train_fn()[0]
-        if i%5 == 0:
-            print i,':',loss
+        if i % 5 == 0:
+            print i, ':', loss
 
 
     print labels[0]
     p = rnn.predict()
     print p(data[0])
-    #data, labels = generate_parity_data(1)
-    #predicted = p.predict(data)
-    #print predicted
-    #print labels
+
+    # Check for generalization
+    data, labels = generate_parity_data(2)
+    for i in range(len(data)):
+        predicted = p(data[0])
+        print 'New Data:', data[0]
+        print "New Labels:",labels[0]
+        print "New predict:", predicted
     #"""
