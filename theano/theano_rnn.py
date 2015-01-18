@@ -3,6 +3,7 @@ import theano.tensor as T
 from theano_utils import randn, NP_FLOATX
 from theano_nn import SquaredLoss, TanhLayer, SigmLayer, SoftMaxLayer
 import numpy as np
+import theano.typed_list
 
 __author__ = 'justin'
 
@@ -133,14 +134,33 @@ class RecurrentNetwork(object):
             next_layer, hidden_states = results
             previous_layer = next_layer
 
-
-            """
-            n_timestep, n_dim = previous_layer.shape
-            for t in range(n_timestep):
-                next_layer, hidden_state = loop(previous_layer[i], hidden_state)
-            """
-
         return previous_layer
+
+    def predict_list(self):
+        results, results_list, updates, data_list = self.forward_across_time_list()
+        pred = theano.function(inputs=[data_list, results_list], outputs=[results, results_list], updates=updates)
+        return pred
+
+    def forward_across_time_list(self):
+        data_list = theano.typed_list.TypedListType(T.dmatrix)(name='data_list')
+        length = theano.typed_list.length(data_list)
+
+        results_list = theano.typed_list.TypedListType(T.dmatrix)(name='results_list')
+        def ns(): pass
+        ns.results_list = results_list
+
+        def loop(i, data_list_arg):
+            training_ex = data_list_arg[i]
+            output_layer = self.forward_across_time(training_ex)
+            #import pdb; pdb.set_trace()
+            ns.results_list = ns.results_list.append(output_layer)
+            ns.results_list = ns.results_list.append(training_ex)
+            return output_layer
+        results, updates = theano.scan(fn=loop,
+                    sequences=[T.arange(length, dtype='int64')],
+                    outputs_info=[None],
+                    non_sequences=[data_list])
+        return results, ns.results_list, updates, data_list
 
     def prepare_objective(self, data, labels):
         # data is a list of matrices
@@ -195,7 +215,7 @@ def generate_parity_data(num):
     examples = []
     labels = []
     for i in range(num):
-        N = np.random.randint(low=3, high=10)
+        N = np.random.randint(low=4, high=5)
 
         rand_data = np.random.randint(size=(N, 1), low=0, high=2).astype(np.float32)
 
@@ -265,16 +285,16 @@ if __name__ == "__main__":
     #TODO:
     # - Use theano's typed_list instead of python lists
     # - Don't use shared variables on data/labels in forward pass loop (supply them as function args)
-
     #"""
-    data, labels = generate_parity_data(5)
+
+    data, labels = generate_parity_data(1)
     print 'data:', data[0].T
 
-    l1 = RNNIPLayer(1, 2, T.tanh)
-    l2 = RNNIPLayer(2, 1, T.nnet.sigmoid)
+    l1 = RNNIPLayer(1, 1, T.tanh)
+    #l2 = RNNIPLayer(2, 1, T.nnet.sigmoid)
 
 
-    rnn = RecurrentNetwork([l1, l2], SquaredLoss())
+    rnn = RecurrentNetwork([l1], SquaredLoss())
     p = rnn.predict()
 
     ob = rnn.prepare_objective(data, labels)
@@ -297,7 +317,11 @@ if __name__ == "__main__":
     data, labels = generate_parity_data(2)
     for i in range(len(data)):
         predicted = p(data[0])
-        print 'New Data:', data[0]
         print "New Labels:",labels[0]
         print "New predict:", predicted
+
+    p_list = rnn.predict_list()
+    a = []
+    print p_list(data, a)
+    print a
     #"""
