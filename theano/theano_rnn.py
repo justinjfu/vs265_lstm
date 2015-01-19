@@ -163,6 +163,23 @@ class RecurrentNetwork(object):
                     non_sequences=[data_list])
         return results, ns.results_list, updates, data_list
 
+    def prepare_objective_list(self):
+        data_list = theano.typed_list.TypedListType(T.dmatrix)(name='data_list')
+        label_list = theano.typed_list.TypedListType(T.dmatrix)(name='label_list')
+        length = theano.typed_list.length(data_list)
+
+        def loop(i, data_list_arg, label_list_arg):
+            training_ex = data_list_arg[i]
+            output_layer = self.forward_across_time(training_ex)
+            layer_loss = self.loss.loss(data_list_arg[i], output_layer)
+            return layer_loss
+        results, updates = theano.scan(fn=loop,
+                    sequences=[T.arange(length, dtype='int64')],
+                    outputs_info=[None],
+                    non_sequences=[data_list, label_list])
+        return results, data_list
+
+
     def prepare_objective(self, data, labels):
         # data is a list of matrices
         obj = None
@@ -371,7 +388,7 @@ if __name__ == "__main__":
     blah = theano.function(inputs=[k], outputs=results, updates=updates)
     print blah(1)
     """
-    data, labels = generate_parity_data(20, 7)
+    data, labels = generate_parity_data(20, 10)
     print 'data:', data[0].T
 
     l1 = RNNIPLayer(1, 10, T.tanh)
@@ -386,7 +403,7 @@ if __name__ == "__main__":
     loss_func = theano.function([data_var, label_var], ob)
 
     print p(data[0])
-    train_fn = train_gd(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.0037)
+    train_fn = train_gd(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.0035)
 
     for i in range(4000):
         for j in range(len(data)):
@@ -401,6 +418,10 @@ if __name__ == "__main__":
 
     print labels[0]
     p = rnn.predict()
+    print p(data[0])
+
+    data, labels = generate_parity_data(1, 15)
+    print labels[0]
     print p(data[0])
 
     data, labels = generate_parity_data(1, 15)
