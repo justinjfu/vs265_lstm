@@ -177,8 +177,8 @@ class RecurrentNetwork(object):
                     sequences=[T.arange(length, dtype='int64')],
                     outputs_info=[None],
                     non_sequences=[data_list, label_list])
-        return results, data_list
-
+        results = T.sum(results)
+        return results, data_list, label_list
 
     def prepare_objective(self, data, labels):
         # data is a list of matrices
@@ -227,6 +227,20 @@ def train_gd(obj, params, args, batch_size=10, eta=0.01):
         outputs=[obj, ii],
         updates=updates
     )
+    return train
+
+def train_gd_list(obj, params, data_arg, label_arg, eta=0.01):
+    print 'PARAMS:', params
+    gradients = T.grad(obj, params)
+    updates = [None]*len(gradients)
+
+    for i in range(len(gradients)):
+        updates[i] = (params[i], params[i]-eta*gradients[i])
+
+    train = theano.function(
+        inputs=[data_arg, label_arg],
+        outputs=obj,
+        updates=updates)
     return train
 
 
@@ -299,7 +313,7 @@ def test_rnn():
 
 
 def test_parity():
-    data, labels = generate_parity_data(1)
+    data, labels = generate_parity_data(2, 5)
     print 'data:', data[0].T
 
     l1 = RNNIPLayer(1, 1, T.tanh)
@@ -309,9 +323,15 @@ def test_parity():
     rnn = RecurrentNetwork([l1], SquaredLoss())
     p = rnn.predict()
 
-    ob = rnn.prepare_objective(data, labels)
-    fff = theano.function([], ob)
+    ob, data_arg, label_arg = rnn.prepare_objective_list()
+    fff = theano.function([data_arg, label_arg], ob)
 
+    print fff(data, labels)
+
+    train_fn = train_gd_list(ob, rnn.params(), data_arg, label_arg)
+    for i in range(100):
+        print train_fn(data, labels)
+    """
     print p(data[0])
     train_fn = train_gd_host(rnn, data, labels, eta=0.1)
 
@@ -336,7 +356,7 @@ def test_parity():
     a = []
     print p_list(data, a)
     print a
-
+    """
 
 def test_list():
     #TODO: typed_list doesn't seem to work with append/outputs
@@ -388,6 +408,9 @@ if __name__ == "__main__":
     blah = theano.function(inputs=[k], outputs=results, updates=updates)
     print blah(1)
     """
+
+    test_parity()
+    """
     data, labels = generate_parity_data(20, 10)
     print 'data:', data[0].T
 
@@ -427,4 +450,5 @@ if __name__ == "__main__":
     data, labels = generate_parity_data(1, 15)
     print labels[0]
     print p(data[0])
+    """
 
