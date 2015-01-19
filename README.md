@@ -1,9 +1,8 @@
 lstm
 ====
 
-LSTM Implementation
+LSTM Implementation - Theano version
 
 TODO:
-- Vectorize the code across training examples.
-- Clean up the matrix dimension nonsense (ex. 8x2x1 matrices).
-- Clean up the weights_array nonsense
+- Use padded matrices instead of typed list
+    - May need to sort training examples by size?
