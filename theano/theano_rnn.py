@@ -15,7 +15,7 @@ class BaseLayer(object):
         self.layer_id = BaseLayer.n_instances
         BaseLayer.n_instances += 1
 
-    def forward_time(self, prev_layer, prev_state):
+    def forward_time(self, prev_layer, prev_state, prev_output):
         """
         Run a forward pass for a single layer and single time step
         :param prev_layer:
@@ -25,6 +25,9 @@ class BaseLayer(object):
         raise NotImplementedError
 
     def initial_state(self):
+        raise NotImplementedError
+
+    def initial_output(self):
         raise NotImplementedError
 
     def params(self):
@@ -38,22 +41,34 @@ class FeedForwardLayer(BaseLayer):
     """
     def __init__(self):
         super(FeedForwardLayer, self).__init__()
-        self.zero = theano.shared(0)
+        self.zero = theano.shared(np.array([0.0]))
 
     def forward(self, prev_layer):
         raise NotImplementedError
 
-    def forward_time(self, prev_layer, prev_state):
+    def forward_time(self, prev_layer, prev_state, prev_output):
         return self.forward(prev_layer), self.zero
 
     def initial_state(self):
         return self.zero  # Unused
+
+    def initial_output(self):
+        return self.zero  # Unused
+
+    def params(self):
+        raise NotImplementedError
 
 
 class ActivationLayer(FeedForwardLayer):
     def __init__(self, act):
         super(ActivationLayer, self).__init__()
         self.act = act
+
+    def forward(self, prev_layer):
+        return self.act(prev_layer)
+
+    def params(self):
+        return []
 
 
 class FFIPLayer(FeedForwardLayer):
@@ -78,12 +93,16 @@ class RNNIPLayer(BaseLayer):
         self.n_out = n_out
         self.w_ff = theano.shared(0.2*randn(n_in, n_out), name="rnn_ip_wff_"+str(self.layer_id))
         self.w_r = theano.shared(0.2*randn(n_out, n_out), name="rnn_ip_wr_"+str(self.layer_id))
+        self.bias = theano.shared(0.2*randn(n_out), name="rnn_ip_bias_"+str(self.layer_id))
         self.act = act
 
-    def forward_time(self, prev_layer, prev_state):
-        new_state = self.w_r.dot(prev_state)
-        output = self.act(prev_layer.dot(self.w_ff)+new_state)
+    def forward_time(self, prev_layer, _, prev_output):
+        new_state = self.w_r.dot(prev_output)
+        output = self.act(prev_layer.dot(self.w_ff)+new_state+self.bias)
         return output, output+0
+
+    def initial_output(self):
+        return theano.shared(np.zeros(self.n_out))
 
     def initial_state(self):
         #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
@@ -95,11 +114,63 @@ class RNNIPLayer(BaseLayer):
 
 
 class LSTMLayer(BaseLayer):
-    def __init__(self):
+    def __init__(self, n_input, n_out, act_f, act_g, act_h):
         super(LSTMLayer, self).__init__()
-        #TODO: Copy implementation from code in master
-        raise NotImplementedError
 
+        self.n_input = n_input
+        self.n_out = n_out
+
+        self.act_f = act_f  # activation function on gates
+        self.act_g = act_g  # activation function on inputs
+        self.act_h = act_h  # activation function on ouputs
+
+        def init_weights(d1, d2, name):
+            return theano.shared(np.random.uniform(-0.1, 0.1, (d1, d2)), name=name+"_"+str(self.layer_id))
+
+        self.forgetw_x = init_weights(n_out, n_input, "forgetw_x")  # forget weights from X
+        self.forgetw_h = init_weights(n_out, n_out, "forgetw_h")  # forget weights from previous hidden
+
+        self.inw_x = init_weights(n_out, n_input, "inw_x")  # input weights from X
+        self.inw_h = init_weights(n_out, n_out, "inw_h") # input weights from previous hidden
+
+        self.outw_x = init_weights(n_out, n_input, "outw_x")  # output weights from X
+        self.outw_h = init_weights(n_out, n_out, "outw_h")  # output weights from previous hidden
+
+        self.cellw_x = init_weights(n_out, n_input, "cellw_x") # cell state weights from X
+        self.cellw_h = init_weights(n_out, n_out, "cellw_h")  # cell state weights from previous hidden
+
+    def forward_time(self, previous_layer, previous_cell_state, previous_output):
+        # Compute input gate
+        input_a = self.inw_x.dot(previous_layer) + self.inw_h.dot(previous_output)
+        input_b = self.act_f(input_a)  # Input gate outputs
+
+        # Compute forget gate
+        forget_a = self.forgetw_x.dot(previous_layer) + self.forgetw_h.dot(previous_output)
+        forget_b = self.act_f(forget_a)  # Forget gate outputs
+
+        # Compute new cell states
+        a_t_c = self.cellw_x.dot(previous_layer) + self.cellw_h.dot(previous_output)
+        new_cell_states = input_b * self.act_g(a_t_c) + forget_b * previous_cell_state
+
+        # Compute output gates
+        output_a = self.outw_x.dot(previous_layer) + self.outw_h.dot(previous_output)
+        output_b = self.act_f(output_a)  # Input gate outputs
+
+        # Compute new hidden layer outputs
+        output = output_b * self.act_h(new_cell_states)
+        return output, new_cell_states
+
+    def initial_state(self):
+        #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
+        return theano.shared(np.zeros(self.n_out))
+
+    def initial_output(self):
+        return theano.shared(np.zeros(self.n_out))
+
+    def params(self):
+        """ Return a list of trainable parameters """
+        return [self.forgetw_x, self.forgetw_h, self.inw_x, self.inw_h, self.outw_x, self.outw_h,
+                self.cellw_x, self.cellw_h]
 
 class RecurrentNetwork(object):
     def __init__(self, layers, loss):
@@ -123,14 +194,14 @@ class RecurrentNetwork(object):
         previous_layer = training_ex
         for layer in self.layers:
             hidden_state = layer.initial_state()
-
-            def loop(prev_layer, prev_state):
-                nlayer, nstate = layer.forward_time(prev_layer, prev_state)
+            init_state = layer.initial_output()
+            def loop(prev_layer, prev_output, prev_state):
+                nlayer, nstate = layer.forward_time(prev_layer, prev_state, prev_output)
                 return nlayer, nstate
 
             results, updates = theano.scan(fn=loop,
                                             sequences=[previous_layer],
-                                            outputs_info=[None, hidden_state])
+                                            outputs_info=[dict(initial=init_state, taps=[-1]), hidden_state])
             next_layer, hidden_states = results
             previous_layer = next_layer
 
@@ -409,15 +480,18 @@ if __name__ == "__main__":
     print blah(1)
     """
 
-    test_parity()
-    """
+    #test_parity()
+
     data, labels = generate_parity_data(20, 10)
     print 'data:', data[0].T
 
-    l1 = RNNIPLayer(1, 10, T.tanh)
-    l2 = RNNIPLayer(10, 1, T.nnet.sigmoid)
+    #l1 = RNNIPLayer(1, 10, T.tanh)
+    #l2 = RNNIPLayer(10, 1, T.nnet.sigmoid)
+    l1 = LSTMLayer(1, 2, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l2 = FFIPLayer(2, 1)
+    l3 = ActivationLayer(T.nnet.sigmoid)
 
-    rnn = RecurrentNetwork([l1, l2], SquaredLoss())
+    rnn = RecurrentNetwork([l1, l2, l3], SquaredLoss())
     p = rnn.predict()
 
     data_var = T.matrix('data')
@@ -426,9 +500,9 @@ if __name__ == "__main__":
     loss_func = theano.function([data_var, label_var], ob)
 
     print p(data[0])
-    train_fn = train_gd(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.0035)
+    train_fn = train_gd(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.05)
 
-    for i in range(4000):
+    for i in range(2000):
         for j in range(len(data)):
             train_fn(data[j], labels[j])
 
@@ -443,12 +517,12 @@ if __name__ == "__main__":
     p = rnn.predict()
     print p(data[0])
 
-    data, labels = generate_parity_data(1, 15)
+    data, labels = generate_parity_data(1, 25)
     print labels[0]
     print p(data[0])
 
-    data, labels = generate_parity_data(1, 15)
+    data, labels = generate_parity_data(1, 25)
     print labels[0]
     print p(data[0])
-    """
+
 
