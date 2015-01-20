@@ -39,9 +39,9 @@ class FeedForwardLayer(BaseLayer):
     """
     A special adapter for feedforward networks
     """
-    def __init__(self):
+    def __init__(self, n=1):
         super(FeedForwardLayer, self).__init__()
-        self.zero = theano.shared(np.array([0.0]))
+        self.zero = theano.shared(np.zeros(n))  # Has to match dimension of output
 
     def forward(self, prev_layer):
         raise NotImplementedError
@@ -60,8 +60,8 @@ class FeedForwardLayer(BaseLayer):
 
 
 class ActivationLayer(FeedForwardLayer):
-    def __init__(self, act):
-        super(ActivationLayer, self).__init__()
+    def __init__(self, act, n):
+        super(ActivationLayer, self).__init__(n)
         self.act = act
 
     def forward(self, prev_layer):
@@ -74,9 +74,9 @@ class ActivationLayer(FeedForwardLayer):
 class FFIPLayer(FeedForwardLayer):
     """ Feedforward inner product layer """
     def __init__(self, n_in, n_out):
-        super(FFIPLayer, self).__init__()
-        self.w = theano.shared(randn(n_in, n_out), name="ff_ip_w_"+str(self.layer_id))
-        self.b = theano.shared(randn(n_out), name="b_ip"+str(self.layer_id))
+        super(FFIPLayer, self).__init__(n_out)
+        self.w = theano.shared(0.2*randn(n_in, n_out), name="ff_ip_w_"+str(self.layer_id))
+        self.b = theano.shared(0.2*randn(n_out), name="b_ip"+str(self.layer_id))
 
     def forward(self, prev_layer):
         return prev_layer.dot(self.w) + self.b
@@ -127,33 +127,33 @@ class LSTMLayer(BaseLayer):
         def init_weights(d1, d2, name):
             return theano.shared(np.random.uniform(-0.1, 0.1, (d1, d2)), name=name+"_"+str(self.layer_id))
 
-        self.forgetw_x = init_weights(n_out, n_input, "forgetw_x")  # forget weights from X
+        self.forgetw_x = init_weights(n_input, n_out, "forgetw_x")  # forget weights from X
         self.forgetw_h = init_weights(n_out, n_out, "forgetw_h")  # forget weights from previous hidden
 
-        self.inw_x = init_weights(n_out, n_input, "inw_x")  # input weights from X
+        self.inw_x = init_weights(n_input, n_out, "inw_x")  # input weights from X
         self.inw_h = init_weights(n_out, n_out, "inw_h") # input weights from previous hidden
 
-        self.outw_x = init_weights(n_out, n_input, "outw_x")  # output weights from X
+        self.outw_x = init_weights(n_input, n_out, "outw_x")  # output weights from X
         self.outw_h = init_weights(n_out, n_out, "outw_h")  # output weights from previous hidden
 
-        self.cellw_x = init_weights(n_out, n_input, "cellw_x") # cell state weights from X
+        self.cellw_x = init_weights(n_input, n_out, "cellw_x") # cell state weights from X
         self.cellw_h = init_weights(n_out, n_out, "cellw_h")  # cell state weights from previous hidden
 
     def forward_time(self, previous_layer, previous_cell_state, previous_output):
         # Compute input gate
-        input_a = self.inw_x.dot(previous_layer) + self.inw_h.dot(previous_output)
+        input_a = previous_layer.dot(self.inw_x) + previous_output.dot(self.inw_h)
         input_b = self.act_f(input_a)  # Input gate outputs
 
         # Compute forget gate
-        forget_a = self.forgetw_x.dot(previous_layer) + self.forgetw_h.dot(previous_output)
+        forget_a = previous_layer.dot(self.forgetw_x) + previous_output.dot(self.forgetw_h)
         forget_b = self.act_f(forget_a)  # Forget gate outputs
 
         # Compute new cell states
-        a_t_c = self.cellw_x.dot(previous_layer) + self.cellw_h.dot(previous_output)
+        a_t_c = previous_layer.dot(self.cellw_x) + previous_output.dot(self.cellw_h)
         new_cell_states = input_b * self.act_g(a_t_c) + forget_b * previous_cell_state
 
         # Compute output gates
-        output_a = self.outw_x.dot(previous_layer) + self.outw_h.dot(previous_output)
+        output_a = previous_layer.dot(self.outw_x) + previous_output.dot(self.outw_h)
         output_b = self.act_f(output_a)  # Input gate outputs
 
         # Compute new hidden layer outputs
@@ -169,6 +169,7 @@ class LSTMLayer(BaseLayer):
 
     def params(self):
         """ Return a list of trainable parameters """
+        #return []
         return [self.forgetw_x, self.forgetw_h, self.inw_x, self.inw_h, self.outw_x, self.outw_h,
                 self.cellw_x, self.cellw_h]
 
@@ -483,15 +484,17 @@ if __name__ == "__main__":
     #test_parity()
 
     data, labels = generate_parity_data(20, 10)
-    print 'data:', data[0].T
+    print 'data:', data[0]
 
     #l1 = RNNIPLayer(1, 10, T.tanh)
     #l2 = RNNIPLayer(10, 1, T.nnet.sigmoid)
-    l1 = LSTMLayer(1, 2, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
-    l2 = FFIPLayer(2, 1)
-    l3 = ActivationLayer(T.nnet.sigmoid)
+    emb = FFIPLayer(1, 4)  # Embedding layer
+    #l1 = ActivationLayer(T.tanh, 4)
+    l1 = LSTMLayer(4, 4, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l2 = FFIPLayer(4, 1)
+    l3 = ActivationLayer(T.nnet.sigmoid, 1)
 
-    rnn = RecurrentNetwork([l1, l2, l3], SquaredLoss())
+    rnn = RecurrentNetwork([emb, l1, l2, l3], SquaredLoss())
     p = rnn.predict()
 
     data_var = T.matrix('data')
