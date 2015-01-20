@@ -1,7 +1,7 @@
 import theano
 import theano.tensor as T
 import theano.ifelse
-from theano_utils import randn
+from theano_utils import randn, NP_FLOATX
 from theano_nn import SquaredLoss
 import numpy as np
 
@@ -41,7 +41,7 @@ class FeedForwardLayer(BaseLayer):
     """
     def __init__(self, n=1):
         super(FeedForwardLayer, self).__init__()
-        self.zero = theano.shared(np.zeros(n))  # Has to match dimension of output
+        self.zero = theano.shared(np.zeros(n).astype(NP_FLOATX))  # Has to match dimension of output
 
     def forward(self, prev_layer):
         raise NotImplementedError
@@ -102,11 +102,10 @@ class RNNIPLayer(BaseLayer):
         return output, output+0
 
     def initial_output(self):
-        return theano.shared(np.zeros(self.n_out))
+        return theano.shared(np.zeros(self.n_out).astype(NP_FLOATX))
 
     def initial_state(self):
-        #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
-        return theano.shared(np.zeros(self.n_out))
+        return theano.shared(np.zeros(self.n_out).astype(NP_FLOATX))
 
     def params(self):
         """ Return a list of trainable parameters """
@@ -125,7 +124,7 @@ class LSTMLayer(BaseLayer):
         self.act_h = act_h  # activation function on ouputs
 
         def init_weights(d1, d2, name):
-            return theano.shared(np.random.uniform(-0.1, 0.1, (d1, d2)), name=name+"_"+str(self.layer_id))
+            return theano.shared(np.random.uniform(-0.1, 0.1, (d1, d2)).astype(NP_FLOATX), name=name+"_"+str(self.layer_id))
 
         self.forgetw_x = init_weights(n_input, n_out, "forgetw_x")  # forget weights from X
         self.forgetw_h = init_weights(n_out, n_out, "forgetw_h")  # forget weights from previous hidden
@@ -162,16 +161,17 @@ class LSTMLayer(BaseLayer):
 
     def initial_state(self):
         #return np.zeros((self.n_out, 1))  <---- This produces very different numbers
-        return theano.shared(np.zeros(self.n_out))
+        return theano.shared(np.zeros(self.n_out).astype(NP_FLOATX))
 
     def initial_output(self):
-        return theano.shared(np.zeros(self.n_out))
+        return theano.shared(np.zeros(self.n_out).astype(NP_FLOATX))
 
     def params(self):
         """ Return a list of trainable parameters """
         #return []
         return [self.forgetw_x, self.forgetw_h, self.inw_x, self.inw_h, self.outw_x, self.outw_h,
                 self.cellw_x, self.cellw_h]
+
 
 class RecurrentNetwork(object):
     def __init__(self, layers, loss):
@@ -229,12 +229,26 @@ class RecurrentNetwork(object):
         obj = layer_loss
         return obj
 
+    def prepare_objective_var_batch(self, data_tens, label_tens):
+        # untested
+
+        def loop(training_ex, label_ex, prev_sum):
+            net_output = self.forward_across_time(training_ex)
+            layer_loss = self.loss.loss(label_ex, net_output)
+            return prev_sum+layer_loss
+
+        init_sum = np.zeros(0).astype(NP_FLOATX)
+        results, updates = theano.scan(fn=loop,
+                                       sequences=[data_tens, label_tens],
+                                       outputs_info=[init_sum])
+        return results[-1]
+
 
 def train_gd_batch(obj, params, args, batch_size=10, eta=0.01):
     gradients = T.grad(obj, params)
 
     ii = theano.shared(0)
-    total_grad = [theano.shared(np.zeros_like(param.get_value())) for param in params]
+    total_grad = [theano.shared(np.zeros_like(param.get_value()).astype(NP_FLOATX)) for param in params]
 
     updates = []
 
@@ -249,7 +263,6 @@ def train_gd_batch(obj, params, args, batch_size=10, eta=0.01):
                                                             T.zeros_like(total_grad[i]),
                                                             total_grad[i]+gradients[i]) ))
 
-
     train = theano.function(
         inputs=args,
         outputs=[obj, ii],
@@ -257,6 +270,35 @@ def train_gd_batch(obj, params, args, batch_size=10, eta=0.01):
     )
     return train
 
+def train_gd_batch_momentum(obj, params, args, batch_size=10, eta=0.01, momentum=0.5):
+    gradients = T.grad(obj, params)
+
+    ii = theano.shared(0)
+    total_grad = [theano.shared(np.zeros_like(param.get_value()).astype(NP_FLOATX)) for param in params]
+    momentums = [theano.shared(np.zeros_like(param.get_value()).astype(NP_FLOATX)) for param in params]
+
+    updates = []
+
+
+    updates.append((ii, ii+1))
+    for i in range(len(params)):
+        update_gradient = eta*total_grad[i]+momentum*momentums[i]
+        updates.append((params[i], theano.ifelse.ifelse(T.eq(T.mod(ii, batch_size), 0),
+                                                        params[i]-update_gradient,
+                                                        params[i] )))
+        updates.append((total_grad[i], theano.ifelse.ifelse(T.eq(T.mod(ii, batch_size), 0),
+                                                            T.zeros_like(total_grad[i]),
+                                                            total_grad[i]+gradients[i]) ))
+        updates.append((momentums[i], theano.ifelse.ifelse(T.eq(T.mod(ii, batch_size), 0),
+                                                        update_gradient,
+                                                        momentums[i] )))
+
+    train = theano.function(
+        inputs=args,
+        outputs=[obj, ii],
+        updates=updates
+    )
+    return train
 
 def generate_parity_data(num, l):
     examples = []
@@ -314,8 +356,86 @@ def test_parity():
     print labels[0]
     print p(data[0])
 
+def test_memorize():
+    examples = []
+    labels = []
+
+    def gen_example(n, t=10):
+        data = np.zeros((t,1)).astype(NP_FLOATX)
+        data[0,0] = n
+        label = np.zeros((t,1)).astype(NP_FLOATX)
+        label[t-1,0] = n
+        return data, label
+
+    for i in range(50):
+        randi = np.random.randint(low=1, high=100)
+        randi = (randi/100.0)
+        data, label = gen_example(randi)
+        examples.append(data)
+        labels.append(label)
+
+    l1 = LSTMLayer(1, 20, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l2 = LSTMLayer(20, 20, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l3 = FFIPLayer(20, 1)
+    l4 = ActivationLayer(T.nnet.sigmoid, 1)
+    rnn = RecurrentNetwork([l1, l2, l3, l4], SquaredLoss())
+    p = rnn.predict()
+
+    data_var = T.matrix('data')
+    label_var = T.matrix('labels')
+    ob = rnn.prepare_objective_var(data_var, label_var)
+    loss_func = theano.function([data_var, label_var], ob)
+
+    eta = theano.shared(np.array(0.02).astype(NP_FLOATX))
+    train_fn = train_gd_batch_momentum(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=eta)
+
+    for i in range(4000):
+        for j in range(len(data)):
+            train_fn(examples[j], labels[j])
+
+        if i % 20 == 0:
+            loss_tot = 0
+            for j in range(len(data)):
+                loss_tot += loss_func(examples[j], labels[j])
+            print i, ':', loss_tot
+
+    eta.set_value(np.array(0.005).astype(NP_FLOATX))
+    #train_fn = train_gd_batch_momentum(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.005)
+
+    for i in range(2000):
+        for j in range(len(data)):
+            train_fn(examples[j], labels[j])
+
+        if i % 20 == 0:
+            loss_tot = 0
+            for j in range(len(data)):
+                loss_tot += loss_func(examples[j], labels[j])
+            print i, ':', loss_tot
+
+    eta.set_value(np.array(0.002).astype(NP_FLOATX))
+
+    for i in range(2000):
+        for j in range(len(data)):
+            train_fn(examples[j], labels[j])
+
+        if i % 20 == 0:
+            loss_tot = 0
+            for j in range(len(data)):
+                loss_tot += loss_func(examples[j], labels[j])
+            print i, ':', loss_tot
+
+    print p(examples[0]), labels[0]
+    print p(examples[1]), labels[1]
+    print p(examples[5]), labels[5]
+    for test in [0.22, 0.96, 0.67]:
+        print '==== Test ', test
+        ex, l = gen_example(test)
+        print p(ex), l
+
+
 if __name__ == "__main__":
     np.random.seed(10)
-    test_parity()
+    #test_parity()
+    test_memorize()
 
 
