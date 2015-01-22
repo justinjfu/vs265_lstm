@@ -63,4 +63,6 @@ if hasgpu():
 else:
     gpu_host = lambda x: x
 
+rng = np.random.RandomState(23455)
+
 

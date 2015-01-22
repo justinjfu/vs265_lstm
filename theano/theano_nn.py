@@ -1,7 +1,10 @@
+from theano.tensor.nnet import conv
+from theano.tensor.signal import downsample
+import theano_utils
+
 __author__ = 'justin'
 
 import numpy as np
-import time
 import theano.tensor as T
 import theano
 import scipy.weave as wv
@@ -9,9 +12,6 @@ from theano import pp, shared, function
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano_utils import gpu_host, NP_FLOATX, randn
 from watchers import *
-
-rng = np.random
-
 
 class TheanoLayer(object):
     n_instances = 0
@@ -49,12 +49,91 @@ class IPLayer(TheanoLayer):
         return [self.w, self.b]
 
     def __getstate__(self):
-        return (self.w, self.b)
+        return self.w, self.b
 
     def __setstate__(self, state):
         w, b = state
         self.w = w
         self.b = b
+
+
+class ConvPoolLayer(object):
+    def __init__(self, filter_shape, image_shape, poolsize=(2, 2)):
+        """
+        Allocate a ConvPoolLayer with shared variable internal parameters.
+
+        :type filter_shape: tuple or list of length 4
+        :param filter_shape: (number of filters, num input feature maps,
+                              filter height, filter width)
+
+        :type image_shape: tuple or list of length 4
+        :param image_shape: (batch size, num input feature maps,
+                             image height, image width)
+
+        :type poolsize: tuple or list of length 2
+        :param poolsize: the downsampling (pooling) factor (#rows, #cols)
+        """
+        assert image_shape[1] == filter_shape[1]
+        self.filter_shape = filter_shape
+        self.image_shape = image_shape
+        self.poolsize = poolsize
+        # there are "num input feature maps * filter height * filter width"
+        # inputs to each hidden unit
+        fan_in = np.prod(filter_shape[1:])
+        # each unit in the lower layer receives a gradient from:
+        # "num output feature maps * filter height * filter width" /
+        #   pooling size
+        fan_out = (filter_shape[0] * np.prod(filter_shape[2:]) /
+                   np.prod(poolsize))
+        # initialize weights with random weights
+        W_bound = np.sqrt(6. / (fan_in + fan_out))
+        self.W = theano.shared(
+            np.asarray(
+                theano_utils.rng.uniform(low=-W_bound, high=W_bound, size=filter_shape),
+                dtype=theano.config.floatX
+            ),
+            borrow=True
+        )
+        # the bias is a 1D tensor -- one bias per output feature map
+        b_values = np.zeros((filter_shape[0],), dtype=theano.config.floatX)
+        self.b = theano.shared(value=b_values, borrow=True)
+
+    def change_batch_size(self, new_batch):
+        raise NotImplementedError
+
+    def forward(self, prev_layer):
+        prev_layer = prev_layer.reshape(self.image_shape)
+
+        # convolve input feature maps with filters
+        conv_out = conv.conv2d(
+            input=prev_layer,
+            filters=self.W,
+            filter_shape=self.filter_shape,
+            image_shape=self.image_shape
+        )
+        # downsample each feature map individually, using maxpooling
+        pooled_out = downsample.max_pool_2d(
+            input=conv_out,
+            ds=self.poolsize,
+            ignore_border=True
+        )
+        # add the bias term. Since the bias is a vector (1D array), we first
+        # reshape it to a tensor of shape (1, n_filters, 1, 1). Each bias will
+        # thus be broadcasted across mini-batches and feature map
+        # width & height
+        return T.tanh(pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
+
+    def params(self):
+        # store parameters of this layer
+        return [self.W, self.b]
+
+
+class Flatten2DLayer(TheanoLayer):
+    def __init__(self):
+        super(Flatten2DLayer, self).__init__()
+
+    def forward(self, previous_expr):
+        return previous_expr.flatten(2)
 
 
 class ActivationLayer(TheanoLayer):
@@ -66,6 +145,11 @@ class ActivationLayer(TheanoLayer):
     def forward(self, previous):
         return self.act(previous)
 
+    def __getstate__(self):
+        return self.act
+
+    def __setstate__(self, state):
+        self.act = state
 
 TanhLayer = ActivationLayer(T.tanh)
 SigmLayer = ActivationLayer(T.nnet.sigmoid)
@@ -131,8 +215,12 @@ class Network(object):
     def args(self):
         return [self.data, self.labels]
 
-    def predict(self):
-        return theano.function(inputs=[self.data], outputs=[self.net_out])
+    def predict(self, data):
+        net_out = data
+        for layer in self.layers:
+            net_out = layer.forward(net_out)
+        net_out = net_out
+        return theano.function(inputs=[data], outputs=[net_out])
 
 
 def train_gd(trainable, eta=0.01):
@@ -180,8 +268,6 @@ def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
     eta = np.array(eta).astype(NP_FLOATX)
     momentum = np.array(momentum).astype(NP_FLOATX)
 
-    data = theano.shared(data)
-    labels = theano.shared(labels)
     _, obj = trainable.prepare_objective(data, labels) 
 
     gradients = T.grad(obj, params)
@@ -195,43 +281,79 @@ def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
         updates.append((momentums[i], gpu_host(update_gradient)))
 
     train = theano.function(
-        inputs=[],
+        inputs=[data, labels],
         outputs=[obj],
         updates=updates
     )
-    return lambda: train()[0]
+    return lambda d, l: train(d, l)[0]
 
 
-def run_optimize_simple(train_fn, iters, *args):
-    for i in range(iters):
-        loss = train_fn(*args)
-        print i,':', loss
+def run_optimize_simple(train_fn, data, labels, iters, batch_size=500):
+    epoch = 0
+    N = data.shape[0]
+    batches_per_epoch = N/batch_size
+    n_iter = 0
+    while True:
+        for i in range(batches_per_epoch):
+            start_batch = i*batch_size
+            end_batch = (i+1)*batch_size
+            loss = train_fn(data[start_batch:end_batch],
+                            labels[start_batch:end_batch])
+            n_iter += 1
+            print n_iter,':', loss
+            if n_iter >= iters:
+                return
+        print 'Finished Epoch ', epoch
+        epoch += 1
 
 if __name__ == "__main__":
-    def one_hot(i, n):
-        v = np.zeros(n)
-        v[i] = 1
-        return v
+    import mnist
+    bsize = 500
+    train, valid, test = mnist.get_mnist()
 
-    N = 1000
-    dims = 200
-    data = randn(N, dims)
-    #labels = rng.randint(size=(1,N), low=0, high=2).astype(np.float32)
-    labels = np.array([ one_hot(i%2, 2) for i in range(N)]).astype(np.float32)
+    train_data, train_labels = mnist.preprocess(train, twoD=True)
+    N = train_data.shape[0]
 
-    net = Network([IPLayer(dims, 1000), TanhLayer, IPLayer(1000,300), TanhLayer, IPLayer(300, 100), TanhLayer, IPLayer(100,2), SoftMaxLayer],
-                    CrossEntLoss())
-    predictor = net.predict()
+
+    nkerns=[20, 50]
+    net = Network([ConvPoolLayer(image_shape=(bsize, 1, 28, 28),
+                                 filter_shape=(nkerns[0], 1, 5, 5),
+                                 poolsize=(2, 2)),
+                   ConvPoolLayer(image_shape=(bsize, nkerns[0], 12, 12),
+                                 filter_shape=(nkerns[1], nkerns[0], 5, 5),
+                                 poolsize=(2, 2)),
+                   Flatten2DLayer(),
+                   IPLayer(nkerns[1] * 4 * 4, 500),
+                   SigmLayer,
+                   IPLayer(500,10),
+                   SoftMaxLayer],
+                   CrossEntLoss())
+
+    with open('ip.network', 'rb') as netfile:
+        net = cPickle.load(netfile)
 
     if False:
         optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.0001)
         #optimizer = FOptimizer(train_gd_momentum, net, eta=0.00001)
-        optimizer.addWatcher(InfoWatcher(OnIter(5)))
-        #optimizer.addWatcher(PickleWatcher(net, "net.dat", OnTime(10)))
-        optimizer.addWatcher(TimeWatcher(OnEnd()))
-        optimizer.optimize(400) # 300 iters
+        optimizer.add_watcher(InfoWatcher(OnIter(5)))
+        #optimizer.add_watcher(PickleWatcher(net, "net.dat", OnTime(10)))
+        optimizer.add_watcher(TimeWatcher(OnEnd()))
+        optimizer.iterate(400) # 300 iters
         #optimizer.optimize(50, data, labels) # 300 iters
     else:
-        train_fn = train_gd_momentum_host(net, data, labels, eta=0.0001)
-        run_optimize_simple(train_fn, 400)
+        vdata = T.matrix('data')
+        vdata = vdata.reshape((bsize, 1, 28, 28))
+        vlabels = T.matrix('labels')
+        train_fn = train_gd_momentum_host(net, vdata, vlabels, eta=0.0000001)
+        run_optimize_simple(train_fn, train_data, train_labels, 100, batch_size=bsize)
 
+    with open('ip.network', 'wb') as netfile:
+        cPickle.dump(net, netfile)
+
+    test_data, test_labels = mnist.preprocess(test, twoD=True)
+    tdata = T.matrix('test_data')
+    tdata = tdata.reshape(test_data.shape)
+    print test_data.shape
+    predictor = net.predict(tdata)
+    predictions = predictor(test_data[:bsize])[0]
+    print mnist.error(predictions, test_labels[:bsize])

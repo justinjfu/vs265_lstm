@@ -20,28 +20,29 @@ WatcherInfo = namedtuple("WatcherInfo", "iter time_elapsed loss end")
 class Optimizer(object):
     def __init__(self):
         self.watchers = []
-        self.watcher_info = WatcherInfo(0,0,0, False)
+        self.watcher_info = WatcherInfo(0, 0, 0, False)
 
-    def addWatcher(self, watcher):
+    def add_watcher(self, watcher):
         self.watchers.append(watcher)
 
-    def triggerWatchers(self):
+    def trigger_watchers(self):
         for watcher in self.watchers:
             if watcher.trigger(self.watcher_info):
                 watcher.action(self.watcher_info)
 
-    def optimize(self, n_iters, *args):
+    def iterate(self, n_iters, *args):
         time_start = time.time()
         for i in range(n_iters):
             self.optimize_iter(i, *args)
             self.watcher_info = WatcherInfo(i, time.time()-time_start, self.get_loss(i), i==n_iters-1)
-            self.triggerWatchers()
+            self.trigger_watchers()
 
     def optimize_iter(self, i, *args):
         raise NotImplementedError
     
     def get_loss(self, i):
         raise NotImplementedError
+
 
 class Watcher(object):
     def __init__(self, condition):
@@ -53,6 +54,7 @@ class Watcher(object):
     def action(self, watcher_info):
         raise NotImplementedError
 
+
 class InfoWatcher(Watcher):
     def __init__(self, condition):
         super(InfoWatcher, self).__init__(condition)
@@ -60,12 +62,14 @@ class InfoWatcher(Watcher):
     def action(self, winfo):
         print "[Info:%s] Iter:%d Time:%f Loss:%f" % (self.condition, winfo.iter, winfo.time_elapsed, winfo.loss)
 
+
 class TimeWatcher(Watcher):
     def __init__(self, condition):
         super(TimeWatcher, self).__init__(condition)
 
     def action(self, winfo):
         print "[Time:%s] Time Elapsed:%f" % (self.condition, winfo.time_elapsed)
+
 
 class PickleWatcher(Watcher):
     def __init__(self, to_pickle, name_format, condition):
@@ -81,6 +85,7 @@ class PickleWatcher(Watcher):
 
 # Watcher Conditions
 
+
 class OnIter(object):
     def __init__(self, n):
         self.n = n
@@ -91,12 +96,14 @@ class OnIter(object):
     def __str__(self):
         return 'OnIter{%s}' % self.n
 
+
 class OnEnd(object):
     def __call__(self, watcher_info):
         return watcher_info.end
 
     def __str__(self):
         return 'OnEnd'
+
 
 class OnTime(object):
     def __init__(self, n):
@@ -112,6 +119,7 @@ class OnTime(object):
 
     def __str__(self):
         return 'OnTime{%s}' % self.n
+
 
 class FOptimizer(Optimizer):
     def __init__(self, f, *args, **kwargs):

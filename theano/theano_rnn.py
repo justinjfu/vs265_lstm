@@ -2,7 +2,7 @@ import theano
 import theano.tensor as T
 import theano.ifelse
 from theano_utils import randn, NP_FLOATX
-from theano_nn import SquaredLoss
+from theano_nn import SquaredLoss, CrossEntLoss
 import numpy as np
 
 __author__ = 'justin'
@@ -70,6 +70,14 @@ class ActivationLayer(FeedForwardLayer):
     def params(self):
         return []
 
+def softmax(x):
+    e_x = T.exp(x - x.max( keepdims=True))
+    smax = e_x / e_x.sum( keepdims=True)
+    return smax
+
+SoftmaxLayer = ActivationLayer(softmax)
+TanhLayer = ActivationLayer(T.tanh)
+SigmLayer = ActivationLayer(T.nnet.sigmoid)
 
 class FFIPLayer(FeedForwardLayer):
     """ Feedforward inner product layer """
@@ -356,29 +364,38 @@ def test_parity():
     print labels[0]
     print p(data[0])
 
+
+def one_hot(i, n, one=1.0):
+    v = np.zeros(n).astype(NP_FLOATX)
+    v[i] = one
+    return v
+
 def test_memorize():
     examples = []
     labels = []
 
-    def gen_example(n, t=10):
-        data = np.zeros((t,1)).astype(NP_FLOATX)
-        data[0,0] = n
-        label = np.zeros((t,1)).astype(NP_FLOATX)
-        label[t-1,0] = n
+    def gen_example(n, n_max, t=5):
+        vecs = [one_hot(n, n_max)]
+        for i in range(t):
+            vecs.append(one_hot(n, n_max, one=0.0))
+        data = np.vstack(vecs)
+
+        vecs[0] = one_hot(n, n_max, one=0.0)
+        vecs[-1] = one_hot(n, n_max)
+        label = np.vstack(vecs)
         return data, label
 
-    for i in range(50):
-        randi = np.random.randint(low=1, high=100)
-        randi = (randi/100.0)
-        data, label = gen_example(randi)
+    for i in range(10):
+        randi = np.random.randint(low=0, high=10)
+        data, label = gen_example(randi, 10)
         examples.append(data)
         labels.append(label)
 
-    l1 = LSTMLayer(1, 20, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
-    l2 = LSTMLayer(20, 20, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
-    l3 = FFIPLayer(20, 1)
-    l4 = ActivationLayer(T.nnet.sigmoid, 1)
-    rnn = RecurrentNetwork([l1, l2, l3, l4], SquaredLoss())
+    l1 = LSTMLayer(10, 20, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l2 = LSTMLayer(20, 10, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+
+    l3 = ActivationLayer(softmax, 10)
+    rnn = RecurrentNetwork([l1, l2, l3], CrossEntLoss())
     p = rnn.predict()
 
     data_var = T.matrix('data')
@@ -386,8 +403,8 @@ def test_memorize():
     ob = rnn.prepare_objective_var(data_var, label_var)
     loss_func = theano.function([data_var, label_var], ob)
 
-    eta = theano.shared(np.array(0.02).astype(NP_FLOATX))
-    train_fn = train_gd_batch_momentum(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=eta)
+    eta = theano.shared(np.array(0.05).astype(NP_FLOATX))
+    train_fn = train_gd_batch(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=eta)
 
     for i in range(4000):
         for j in range(len(data)):
@@ -399,22 +416,10 @@ def test_memorize():
                 loss_tot += loss_func(examples[j], labels[j])
             print i, ':', loss_tot
 
-    eta.set_value(np.array(0.005).astype(NP_FLOATX))
+    eta.set_value(np.array(0.01).astype(NP_FLOATX))
     #train_fn = train_gd_batch_momentum(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.005)
 
-    for i in range(2000):
-        for j in range(len(data)):
-            train_fn(examples[j], labels[j])
-
-        if i % 20 == 0:
-            loss_tot = 0
-            for j in range(len(data)):
-                loss_tot += loss_func(examples[j], labels[j])
-            print i, ':', loss_tot
-
-    eta.set_value(np.array(0.002).astype(NP_FLOATX))
-
-    for i in range(2000):
+    for i in range(1000):
         for j in range(len(data)):
             train_fn(examples[j], labels[j])
 
@@ -427,10 +432,6 @@ def test_memorize():
     print p(examples[0]), labels[0]
     print p(examples[1]), labels[1]
     print p(examples[5]), labels[5]
-    for test in [0.22, 0.96, 0.67]:
-        print '==== Test ', test
-        ex, l = gen_example(test)
-        print p(ex), l
 
 
 if __name__ == "__main__":
