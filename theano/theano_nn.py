@@ -300,7 +300,7 @@ def run_optimize_simple(train_fn, data, labels, iters, batch_size=500):
             loss = train_fn(data[start_batch:end_batch],
                             labels[start_batch:end_batch])
             n_iter += 1
-            print n_iter,':', loss
+            print n_iter,':', loss*10
             if n_iter >= iters:
                 return
         print 'Finished Epoch ', epoch
@@ -311,7 +311,7 @@ if __name__ == "__main__":
     bsize = 500
     train, valid, test = mnist.get_mnist()
 
-    train_data, train_labels = mnist.preprocess(train, twoD=True)
+    train_data, train_labels = mnist.preprocess(train)
     N = train_data.shape[0]
 
 
@@ -324,13 +324,17 @@ if __name__ == "__main__":
                                  poolsize=(2, 2)),
                    Flatten2DLayer(),
                    IPLayer(nkerns[1] * 4 * 4, 500),
-                   SigmLayer,
+                   TanhLayer,
                    IPLayer(500,10),
                    SoftMaxLayer],
                    CrossEntLoss())
 
     with open('ip.network', 'rb') as netfile:
         net = cPickle.load(netfile)
+
+    c1 = net.layers[0]
+    c2 = net.layers[1]
+    #net.layers[4] = ActivationLayer(lambda x: 2*T.nnet.sigmoid(x)-1)
 
     if False:
         optimizer = FOptimizer(train_gd_momentum_host, net, data, labels, eta=0.0001)
@@ -342,18 +346,20 @@ if __name__ == "__main__":
         #optimizer.optimize(50, data, labels) # 300 iters
     else:
         vdata = T.matrix('data')
-        vdata = vdata.reshape((bsize, 1, 28, 28))
+        #vdata = vdata.reshape((bsize, 1, 28, 28))
         vlabels = T.matrix('labels')
-        train_fn = train_gd_momentum_host(net, vdata, vlabels, eta=0.0000001)
+        train_fn = train_gd_momentum_host(net, vdata, vlabels, eta=0.00015, momentum=0.1)
         run_optimize_simple(train_fn, train_data, train_labels, 100, batch_size=bsize)
 
     with open('ip.network', 'wb') as netfile:
         cPickle.dump(net, netfile)
 
-    test_data, test_labels = mnist.preprocess(test, twoD=True)
+    test_data, test_labels = mnist.preprocess(test)
     tdata = T.matrix('test_data')
-    tdata = tdata.reshape(test_data.shape)
+    #tdata = tdata.reshape(test_data.shape)
+    c1.image_shape = (10000, c1.image_shape[1], c1.image_shape[2], c1.image_shape[3])
+    c2.image_shape = (10000, c2.image_shape[1], c2.image_shape[2], c2.image_shape[3])
     print test_data.shape
     predictor = net.predict(tdata)
-    predictions = predictor(test_data[:bsize])[0]
-    print mnist.error(predictions, test_labels[:bsize])
+    predictions = predictor(test_data)[0]
+    print mnist.error(predictions, test_labels)

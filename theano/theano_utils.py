@@ -11,7 +11,7 @@ elif FLOATX == 'float64':
     NP_FLOATX = np.float64
 
 # randn as floatX
-randn = lambda *dims: np.random.randn(*dims).astype(NP_FLOATX)
+randn = lambda *dims: 0.1*np.random.randn(*dims).astype(NP_FLOATX)
 
 def set_device(device):
     global DEVICE
