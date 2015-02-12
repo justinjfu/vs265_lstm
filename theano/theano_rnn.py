@@ -34,6 +34,9 @@ class BaseLayer(object):
         """ Return a list of trainable parameters """
         return []
 
+    def __str__(self):
+        return 'layer_'+str(self.layer_id)
+
 
 class FeedForwardLayer(BaseLayer):
     """
@@ -75,9 +78,9 @@ def softmax(x):
     smax = e_x / e_x.sum( keepdims=True)
     return smax
 
-SoftmaxLayer = ActivationLayer(softmax)
-TanhLayer = ActivationLayer(T.tanh)
-SigmLayer = ActivationLayer(T.nnet.sigmoid)
+#SoftmaxLayer = ActivationLayer(softmax)
+#TanhLayer = ActivationLayer(T.tanh)
+#SigmLayer = ActivationLayer(T.nnet.sigmoid)
 
 class FFIPLayer(FeedForwardLayer):
     """ Feedforward inner product layer """
@@ -180,6 +183,13 @@ class LSTMLayer(BaseLayer):
         return [self.forgetw_x, self.forgetw_h, self.inw_x, self.inw_h, self.outw_x, self.outw_h,
                 self.cellw_x, self.cellw_h]
 
+    def __str__(self):
+        return 'lstm_layer_'+str(self.layer_id)
+
+class GRULayer(BaseLayer):
+    def __init__(self, n_input, n_out):
+        super(GRULayer, self).__init__()
+        raise NotImplementedError
 
 class RecurrentNetwork(object):
     def __init__(self, layers, loss):
@@ -190,6 +200,7 @@ class RecurrentNetwork(object):
         self.params_list = []
         for layer in layers:
             self.params_list.extend(layer.params())
+        self.n_layers = len(layers)
 
     def params(self):
         return self.params_list
@@ -199,28 +210,43 @@ class RecurrentNetwork(object):
         pred = theano.function([x], self.forward_across_time(x))
         return pred
 
-    def forward_across_layers(self, training_ex, previous_states=None, previous_outputs=None):
+    def forward_across_layers_fn(self):
         """
         Returns cell states and outputs of each layer (as theano variables)
         """
-        if previous_states is None:
-            previous_states = [layer.initial_input() for layer in self.layers]
-        if previous_outputs is None:
-            previous_outputs = [layer.initial_output() for layer in self.layers]
-
-        prev_layer = training_ex
+        #if previous_states is None:
+        #    previous_states = [layer.initial_input() for layer in self.layers]
+        #if previous_outputs is None:
+        #    previous_outputs = [layer.initial_output() for layer in self.layers]
+        previous_states = [T.vector('prev_state_'+str(layer)) for layer in self.layers]
+        previous_outputs = [T.vector('prev_out_'+str(layer)) for layer in self.layers]
+        first_layer_var = T.vector('first_layer_var')
+        prev_layer = first_layer_var
         new_states = []
         new_outputs = []
-        for layer_idx in range(len(self.layers)):
+        for layer_idx in range(self.n_layers):
             layer = self.layers[layer_idx]
             next_layer, new_state = layer.forward_time(prev_layer,
                                                         previous_states[layer_idx],
-                                                        previous_output[layer_idx])
+                                                        previous_outputs[layer_idx])
             prev_layer = next_layer
             new_states.append(new_state)
             new_outputs.append(next_layer)
+        prop_layer = theano.function(
+            inputs=[first_layer_var]+previous_states+previous_outputs,
+            outputs=new_states+new_outputs,
+            on_unused_input='warn'
+        )
+        def prop_layer_wrapper(training_ex, previous_states=None, previous_outputs=None):
+            if previous_states is None:
+                previous_states = [layer.initial_state().get_value() for layer in self.layers]
+            if previous_outputs is None:
+                previous_outputs = [layer.initial_output().get_value() for layer in self.layers]
+            out = prop_layer(training_ex, *(previous_states+previous_outputs))
+            #returns new_states, new_outputs
+            return out[0:self.n_layers], out[self.n_layers:]
+        return prop_layer_wrapper
 
-        return new_states, new_outputs
 
     def forward_across_time(self, training_ex):
         previous_layer = training_ex
@@ -275,8 +301,9 @@ class RecurrentNetwork(object):
         return results[-1]
 
 
-def train_gd_batch(obj, params, args, batch_size=10, eta=0.01):
+def train_gd_batch(obj, params, args, batch_size=10):
     gradients = T.grad(obj, params)
+    eta = T.scalar()
 
     ii = theano.shared(0)
     total_grad = [theano.shared(np.zeros_like(param.get_value()).astype(NP_FLOATX)) for param in params]
@@ -295,7 +322,7 @@ def train_gd_batch(obj, params, args, batch_size=10, eta=0.01):
                                                             total_grad[i]+gradients[i]) ))
 
     train = theano.function(
-        inputs=args,
+        inputs=args+[eta],
         outputs=[obj, ii],
         updates=updates
     )
@@ -365,11 +392,11 @@ def test_parity():
     loss_func = theano.function([data_var, label_var], ob)
 
     print p(data[0])
-    train_fn = train_gd_batch(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=0.05)
+    train_fn = train_gd_batch(ob, rnn.params(), [data_var, label_var], batch_size=20)
 
-    for i in range(2000):
+    for i in range(600):
         for j in range(len(data)):
-            train_fn(data[j], labels[j])
+            train_fn(data[j], labels[j], 0.05)
 
         if i % 20 == 0:
             loss_tot = 0
@@ -386,6 +413,9 @@ def test_parity():
     print "Test example:"
     print labels[0]
     print p(data[0])
+
+    forward_layers = rnn.forward_across_layers_fn()
+    print forward_layers(data[0][0])
 
 
 def one_hot(i, n, one=1.0):
@@ -409,15 +439,15 @@ def test_memorize():
         return data, label
 
     for i in range(10):
-        randi = np.random.randint(low=0, high=10)
-        data, label = gen_example(randi, 10)
+        randi = np.random.randint(low=0, high=5)
+        data, label = gen_example(randi, 5)
         examples.append(data)
         labels.append(label)
 
-    l1 = LSTMLayer(10, 20, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
-    l2 = LSTMLayer(20, 10, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l1 = LSTMLayer(5, 10, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
+    l2 = LSTMLayer(10, 5, T.nnet.sigmoid, T.nnet.sigmoid, T.tanh)
 
-    l3 = ActivationLayer(softmax, 10)
+    l3 = ActivationLayer(softmax, 5)
     rnn = RecurrentNetwork([l1, l2, l3], CrossEntLoss())
     p = rnn.predict()
 
@@ -427,11 +457,11 @@ def test_memorize():
     loss_func = theano.function([data_var, label_var], ob)
 
     eta = theano.shared(np.array(0.05).astype(NP_FLOATX))
-    train_fn = train_gd_batch(ob, rnn.params(), [data_var, label_var], batch_size=20, eta=eta)
+    train_fn = train_gd_batch(ob, rnn.params(), [data_var, label_var], batch_size=10)
 
     for i in range(4000):
         for j in range(len(data)):
-            train_fn(examples[j], labels[j])
+            train_fn(examples[j], labels[j], 0.05)
 
         if i % 20 == 0:
             loss_tot = 0
@@ -459,7 +489,7 @@ def test_memorize():
 
 if __name__ == "__main__":
     np.random.seed(10)
-    #test_parity()
-    test_memorize()
+    test_parity()
+    #test_memorize()
 
 
