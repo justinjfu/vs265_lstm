@@ -300,7 +300,7 @@ def run_optimize_simple(train_fn, data, labels, iters, batch_size=500):
             loss = train_fn(data[start_batch:end_batch],
                             labels[start_batch:end_batch])
             n_iter += 1
-            print n_iter,':', loss*10
+            print n_iter,':', loss
             if n_iter >= iters:
                 return
         print 'Finished Epoch ', epoch
@@ -315,7 +315,7 @@ if __name__ == "__main__":
     N = train_data.shape[0]
 
 
-    nkerns=[20, 50]
+    nkerns=[30, 70]
     net = Network([ConvPoolLayer(image_shape=(bsize, 1, 28, 28),
                                  filter_shape=(nkerns[0], 1, 5, 5),
                                  poolsize=(2, 2)),
@@ -323,13 +323,17 @@ if __name__ == "__main__":
                                  filter_shape=(nkerns[1], nkerns[0], 5, 5),
                                  poolsize=(2, 2)),
                    Flatten2DLayer(),
-                   IPLayer(nkerns[1] * 4 * 4, 500),
-                   TanhLayer,
+                   IPLayer(nkerns[1] * 4 * 4, 1000),
+                   ReLULayer,
+                   IPLayer(1000,1000),
+                   ReLULayer,
+                   IPLayer(1000,500),
+                   ReLULayer,
                    IPLayer(500,10),
                    SoftMaxLayer],
                    CrossEntLoss())
 
-    with open('ip.network', 'rb') as netfile:
+    with open('mnist.net', 'rb') as netfile:
         net = cPickle.load(netfile)
 
     c1 = net.layers[0]
@@ -348,10 +352,10 @@ if __name__ == "__main__":
         vdata = T.matrix('data')
         #vdata = vdata.reshape((bsize, 1, 28, 28))
         vlabels = T.matrix('labels')
-        train_fn = train_gd_momentum_host(net, vdata, vlabels, eta=0.00015, momentum=0.1)
-        run_optimize_simple(train_fn, train_data, train_labels, 100, batch_size=bsize)
+        train_fn = train_gd_momentum_host(net, vdata, vlabels, eta=0.0001, momentum=0.1)
+        run_optimize_simple(train_fn, train_data, train_labels, 1000, batch_size=bsize)
 
-    with open('ip.network', 'wb') as netfile:
+    with open('mnist.net', 'wb') as netfile:
         cPickle.dump(net, netfile)
 
     test_data, test_labels = mnist.preprocess(test)
