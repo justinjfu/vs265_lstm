@@ -199,6 +199,29 @@ class RecurrentNetwork(object):
         pred = theano.function([x], self.forward_across_time(x))
         return pred
 
+    def forward_across_layers(self, training_ex, previous_states=None, previous_outputs=None):
+        """
+        Returns cell states and outputs of each layer (as theano variables)
+        """
+        if previous_states is None:
+            previous_states = [layer.initial_input() for layer in self.layers]
+        if previous_outputs is None:
+            previous_outputs = [layer.initial_output() for layer in self.layers]
+
+        prev_layer = training_ex
+        new_states = []
+        new_outputs = []
+        for layer_idx in range(len(self.layers)):
+            layer = self.layers[layer_idx]
+            next_layer, new_state = layer.forward_time(prev_layer,
+                                                        previous_states[layer_idx],
+                                                        previous_output[layer_idx])
+            prev_layer = next_layer
+            new_states.append(new_state)
+            new_outputs.append(next_layer)
+
+        return new_states, new_outputs
+
     def forward_across_time(self, training_ex):
         previous_layer = training_ex
         for layer in self.layers:

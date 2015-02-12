@@ -16,7 +16,7 @@ from watchers import *
 class TheanoLayer(object):
     n_instances = 0
     def __init__(self):
-        self.layer_id = TheanoLayer.n_instances 
+        self.layer_id = TheanoLayer.n_instances
         TheanoLayer.n_instances += 1
 
     def forward(self, prev_layer):
@@ -268,7 +268,7 @@ def train_gd_momentum_host(trainable, data, labels, eta=0.01, momentum=0.8):
     eta = np.array(eta).astype(NP_FLOATX)
     momentum = np.array(momentum).astype(NP_FLOATX)
 
-    _, obj = trainable.prepare_objective(data, labels) 
+    _, obj = trainable.prepare_objective(data, labels)
 
     gradients = T.grad(obj, params)
 
